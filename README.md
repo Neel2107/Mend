@@ -1,5 +1,9 @@
 # Mend
 
+<p align="center">
+  <img src="Resources/AppIcon.png" alt="Mend app icon" width="144">
+</p>
+
 **Fix selected text without leaving the app you are writing in.**
 
 [![Build](https://github.com/Neel2107/Mend/actions/workflows/ci.yml/badge.svg)](https://github.com/Neel2107/Mend/actions/workflows/ci.yml)
