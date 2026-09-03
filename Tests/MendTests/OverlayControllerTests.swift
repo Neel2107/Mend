@@ -5,23 +5,32 @@ import Testing
 @MainActor
 @Suite("Overlay presentation")
 struct OverlayControllerTests {
-    @Test("A hidden overlay commits its new state before appearing")
-    func testHiddenOverlayCommitsNewStateBeforeItIsRevealed() {
-        let previousTerminalStates: [OverlayState] = [
-            .success("Fixed"),
-            .failure("Previous error"),
+    @Test("A hidden overlay reveals only its requested state")
+    func testHiddenOverlayRevealsOnlyItsRequestedState() {
+        let transitions: [(previous: OverlayState, requested: OverlayState)] = [
+            (.success("Fixed"), .working("Fixing grammar…")),
+            (.failure("Previous error"), .working("Fixing grammar…")),
+            (.working("Fixing grammar…"), .failure("Select some text first")),
         ]
 
-        for previousState in previousTerminalStates {
+        for transition in transitions {
             let model = OverlayModel()
-            model.state = previousState
+            model.state = transition.previous
             let panel = RecordingOverlayPanel(state: { model.state })
             let controller = OverlayController(model: model, panel: panel)
 
-            controller.show(.working("Fixing grammar…"))
+            controller.show(transition.requested)
 
-            #expect(panel.events == [.setFrame(animated: false), .prepare, .show])
-            #expect(panel.stateWhenShown == .working("Fixing grammar…"))
+            #expect(
+                panel.events == [
+                    .setFrame(animated: false),
+                    .setContentVisible(false),
+                    .show,
+                    .prepare,
+                    .setContentVisible(true),
+                ]
+            )
+            #expect(panel.stateWhenRevealed == transition.requested)
         }
     }
 
@@ -37,35 +46,13 @@ struct OverlayControllerTests {
         #expect(panel.events == [.setFrame(animated: true), .show])
         #expect(panel.stateWhenShown == .success("Fixed"))
     }
-
-    @Test("A terminal state resets off-screen after the overlay hides")
-    func testHiddenTerminalStateIsPreparedForTheNextPresentation() {
-        let model = OverlayModel()
-        let panel = RecordingOverlayPanel(state: { model.state })
-        panel.isVisible = true
-        let controller = OverlayController(model: model, panel: panel)
-
-        controller.show(.success("Fixed"))
-        controller.hideAndPrepareForNextPresentation()
-
-        #expect(panel.isVisible == false)
-        #expect(model.state == OverlayModel.initialState)
-        #expect(
-            panel.events == [
-                .setFrame(animated: true),
-                .show,
-                .hide,
-                .prepare,
-            ]
-        )
-        #expect(panel.stateWhenPrepared == OverlayModel.initialState)
-    }
 }
 
 @MainActor
 private final class RecordingOverlayPanel: OverlayPanelPresenting {
     enum Event: Equatable {
         case setFrame(animated: Bool)
+        case setContentVisible(Bool)
         case prepare
         case show
         case hide
@@ -74,7 +61,7 @@ private final class RecordingOverlayPanel: OverlayPanelPresenting {
     var isVisible = false
     private(set) var events: [Event] = []
     private(set) var stateWhenShown: OverlayState?
-    private(set) var stateWhenPrepared: OverlayState?
+    private(set) var stateWhenRevealed: OverlayState?
     private let state: () -> OverlayState
 
     init(state: @escaping () -> OverlayState) {
@@ -85,8 +72,14 @@ private final class RecordingOverlayPanel: OverlayPanelPresenting {
         events.append(.setFrame(animated: animated))
     }
 
+    func setOverlayContentVisible(_ isVisible: Bool) {
+        if isVisible {
+            stateWhenRevealed = state()
+        }
+        events.append(.setContentVisible(isVisible))
+    }
+
     func prepareForPresentation() {
-        stateWhenPrepared = state()
         events.append(.prepare)
     }
 

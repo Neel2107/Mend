@@ -41,6 +41,7 @@ final class NonActivatingPanel: NSPanel {
 protocol OverlayPanelPresenting: AnyObject {
     var isVisible: Bool { get }
     func setOverlayFrame(_ frame: NSRect, animated: Bool)
+    func setOverlayContentVisible(_ isVisible: Bool)
     func prepareForPresentation()
     func showOverlay()
     func hideOverlay()
@@ -68,6 +69,10 @@ extension NonActivatingPanel: OverlayPanelPresenting {
     func prepareForPresentation() {
         contentView?.layoutSubtreeIfNeeded()
         displayIfNeeded()
+    }
+
+    func setOverlayContentVisible(_ isVisible: Bool) {
+        alphaValue = isVisible ? 1 : 0
     }
 
     func showOverlay() {
@@ -124,27 +129,25 @@ final class OverlayController {
 
         resizeAndPositionPanel(for: state, animated: shouldAnimate)
         if !shouldAnimate {
-            // SwiftUI commits view updates on the next layout pass. Commit the new
-            // state while the panel is hidden so its previous result never flashes.
+            // Reveal the window only after its new SwiftUI content has been drawn.
+            // A hidden window can retain its previous backing frame even after layout.
+            panel.setOverlayContentVisible(false)
+            panel.showOverlay()
             panel.prepareForPresentation()
+            panel.setOverlayContentVisible(true)
+        } else {
+            panel.showOverlay()
         }
-        panel.showOverlay()
 
         if let seconds {
             hideTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self?.hideAndPrepareForNextPresentation()
+                    self?.panel.hideOverlay()
                 }
             }
         }
-    }
-
-    func hideAndPrepareForNextPresentation() {
-        panel.hideOverlay()
-        model.state = OverlayModel.initialState
-        panel.prepareForPresentation()
     }
 
     private func resizeAndPositionPanel(for state: OverlayState, animated: Bool) {
