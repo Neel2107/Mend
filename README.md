@@ -18,6 +18,7 @@ Mend is a lightweight macOS writing assistant. Select text in any application, p
 - Corrects grammar, spelling, punctuation, and phrasing in place
 - Works across macOS applications through a configurable global shortcut
 - Supports OpenAI, Gemini, and custom OpenAI-compatible endpoints
+- Falls back to another configured provider when a request fails
 - Stores API keys in macOS Keychain
 - Lets you customize the editing instruction, endpoint, and model
 - Shows compact progress and result notifications without interrupting your workflow
@@ -64,7 +65,7 @@ Mend stores a separate Keychain entry for each provider.
 
 1. Select text in any application.
 2. Press the configured shortcut.
-3. Mend sends the selection and saved instruction to the configured provider.
+3. Mend sends the selection and saved instruction to the selected provider. If that request fails, it tries another provider with a saved API key.
 4. The corrected text replaces the selection in place.
 
 Press the shortcut again while a request is running to cancel it. You can hide the menu-bar icon from Settings without disabling the global shortcut.
@@ -89,7 +90,7 @@ Create an Apple silicon DMG locally with:
 ## Privacy
 
 - API keys are stored locally in macOS Keychain.
-- Selected text is sent only to the provider endpoint configured in Settings.
+- Selected text is sent to the selected provider and, after a failed request, any configured fallback provider that Mend tries.
 - Mend does not include analytics, user accounts, or a hosted backend.
 - Clipboard contents are restored after each operation.
 

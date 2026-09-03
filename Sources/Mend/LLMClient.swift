@@ -7,6 +7,11 @@ struct LLMConfiguration {
     let apiKey: String
 }
 
+struct ProviderConfiguration {
+    let provider: LLMProvider
+    let llm: LLMConfiguration
+}
+
 struct LLMClient {
     let configuration: LLMConfiguration
 

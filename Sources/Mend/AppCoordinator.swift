@@ -7,9 +7,16 @@ import SwiftUI
 final class AppCoordinator: NSObject {
     private enum CoordinatorError: LocalizedError {
         case shortcutUnavailable
+        case providersFailed([LLMProvider], any Error)
 
         var errorDescription: String? {
-            "That shortcut is already being used by another app"
+            switch self {
+            case .shortcutUnavailable:
+                return "That shortcut is already being used by another app"
+            case .providersFailed(let providers, let lastError):
+                let names = providers.map(\.displayName).joined(separator: " and ")
+                return "\(names) failed: \(lastError.localizedDescription)"
+            }
         }
     }
 
@@ -36,7 +43,7 @@ final class AppCoordinator: NSObject {
         }
 
         if !isPreviewingOverlay,
-           settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+           settings.availableProviderConfigurations.isEmpty {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
@@ -107,7 +114,8 @@ final class AppCoordinator: NSObject {
             return
         }
 
-        guard !settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let providerConfigurations = settings.availableProviderConfigurations
+        guard !providerConfigurations.isEmpty else {
             openSettings()
             overlay.show(.failure("Add an API key in Settings"), autoHideAfter: 4)
             return
@@ -122,13 +130,11 @@ final class AppCoordinator: NSObject {
 
                 overlay.show(.working("Fixing grammar…"))
 
-                let configuration = settings.configuration
-                let result = try await LLMClient(configuration: configuration).rewrite(selection.text)
+                let result = try await rewrite(
+                    selection.text,
+                    using: providerConfigurations
+                )
                 try Task.checkCancellation()
-
-                guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    throw MendError.emptyResponse
-                }
 
                 guard result.trimmingCharacters(in: .whitespacesAndNewlines)
                     != selection.text.trimmingCharacters(in: .whitespacesAndNewlines) else {
@@ -152,6 +158,40 @@ final class AppCoordinator: NSObject {
 
             activeTask = nil
         }
+    }
+
+    private func rewrite(
+        _ text: String,
+        using configurations: [ProviderConfiguration]
+    ) async throws -> String {
+        var attemptedProviders: [LLMProvider] = []
+        var lastError: (any Error)?
+
+        for (index, configuration) in configurations.enumerated() {
+            try Task.checkCancellation()
+            if index > 0 {
+                overlay.show(.working("Trying \(configuration.provider.displayName)…"))
+            }
+
+            attemptedProviders.append(configuration.provider)
+            do {
+                let result = try await LLMClient(configuration: configuration.llm).rewrite(text)
+                guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw MendError.emptyResponse
+                }
+                return result
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+            }
+        }
+
+        guard let lastError else { throw MendError.invalidResponse }
+        if attemptedProviders.count == 1 {
+            throw lastError
+        }
+        throw CoordinatorError.providersFailed(attemptedProviders, lastError)
     }
 
     @objc func openSettings() {

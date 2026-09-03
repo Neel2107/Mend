@@ -59,8 +59,10 @@ final class AppSettings: ObservableObject {
     @Published private(set) var showsMenuBarIcon: Bool
 
     private var draftAPIKeys: [LLMProvider: String] = [:]
+    private let readsAPIKeyFromKeychain: Bool
 
     init(readsAPIKeyFromKeychain: Bool = true) {
+        self.readsAPIKeyFromKeychain = readsAPIKeyFromKeychain
         let defaults = UserDefaults.standard
         let savedEndpoint = defaults.string(forKey: Key.endpoint)
         let savedProviderValue = defaults.string(forKey: Key.provider)
@@ -130,6 +132,55 @@ final class AppSettings: ObservableObject {
             prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
             apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         )
+    }
+
+    var availableProviderConfigurations: [ProviderConfiguration] {
+        let providers = [provider] + LLMProvider.allCases.filter { $0 != provider }
+        let sharedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return providers.compactMap { candidate in
+            let candidateEndpoint: String
+            let candidateModel: String
+            let candidateAPIKey: String
+
+            if candidate == provider {
+                candidateEndpoint = endpoint
+                candidateModel = model
+                candidateAPIKey = apiKey
+            } else {
+                guard candidate != .custom,
+                      let defaultEndpoint = candidate.defaultEndpoint,
+                      let defaultModel = candidate.defaultModel else {
+                    return nil
+                }
+                candidateEndpoint = defaultEndpoint
+                candidateModel = defaultModel
+                candidateAPIKey = storedAPIKey(for: candidate)
+            }
+
+            let configuration = LLMConfiguration(
+                endpoint: candidateEndpoint.trimmingCharacters(in: .whitespacesAndNewlines),
+                model: candidateModel.trimmingCharacters(in: .whitespacesAndNewlines),
+                prompt: sharedPrompt,
+                apiKey: candidateAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+            guard !configuration.apiKey.isEmpty else { return nil }
+            return ProviderConfiguration(provider: candidate, llm: configuration)
+        }
+    }
+
+    private func storedAPIKey(for provider: LLMProvider) -> String {
+        if let cachedKey = draftAPIKeys[provider] {
+            return cachedKey
+        }
+        guard readsAPIKeyFromKeychain else { return "" }
+
+        let savedKey = KeychainStore.read(
+            service: "com.mend.api",
+            account: Self.keyAccount(for: provider)
+        ) ?? ""
+        draftAPIKeys[provider] = savedKey
+        return savedKey
     }
 
     func save() throws {
