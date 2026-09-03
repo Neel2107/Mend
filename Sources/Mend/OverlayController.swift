@@ -27,7 +27,9 @@ enum OverlayState: Equatable {
 
 @MainActor
 final class OverlayModel: ObservableObject {
-    @Published var state: OverlayState = .working("Fixing grammar…")
+    static let initialState = OverlayState.working("Fixing grammar…")
+
+    @Published var state: OverlayState = initialState
 }
 
 final class NonActivatingPanel: NSPanel {
@@ -133,10 +135,16 @@ final class OverlayController {
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self?.panel.hideOverlay()
+                    self?.hideAndPrepareForNextPresentation()
                 }
             }
         }
+    }
+
+    private func hideAndPrepareForNextPresentation() {
+        panel.hideOverlay()
+        model.state = OverlayModel.initialState
+        panel.prepareForPresentation()
     }
 
     private func resizeAndPositionPanel(for state: OverlayState, animated: Bool) {

@@ -37,6 +37,29 @@ struct OverlayControllerTests {
         #expect(panel.events == [.setFrame(animated: true), .show])
         #expect(panel.stateWhenShown == .success("Fixed"))
     }
+
+    @Test("A terminal state resets off-screen after the overlay hides")
+    func testHiddenTerminalStateIsPreparedForTheNextPresentation() async throws {
+        let model = OverlayModel()
+        let panel = RecordingOverlayPanel(state: { model.state })
+        panel.isVisible = true
+        let controller = OverlayController(model: model, panel: panel)
+
+        controller.show(.success("Fixed"), autoHideAfter: 0.01)
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        #expect(panel.isVisible == false)
+        #expect(model.state == OverlayModel.initialState)
+        #expect(
+            panel.events == [
+                .setFrame(animated: true),
+                .show,
+                .hide,
+                .prepare,
+            ]
+        )
+        #expect(panel.stateWhenPrepared == OverlayModel.initialState)
+    }
 }
 
 @MainActor
@@ -51,6 +74,7 @@ private final class RecordingOverlayPanel: OverlayPanelPresenting {
     var isVisible = false
     private(set) var events: [Event] = []
     private(set) var stateWhenShown: OverlayState?
+    private(set) var stateWhenPrepared: OverlayState?
     private let state: () -> OverlayState
 
     init(state: @escaping () -> OverlayState) {
@@ -62,6 +86,7 @@ private final class RecordingOverlayPanel: OverlayPanelPresenting {
     }
 
     func prepareForPresentation() {
+        stateWhenPrepared = state()
         events.append(.prepare)
     }
 
