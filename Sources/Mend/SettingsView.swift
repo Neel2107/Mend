@@ -65,7 +65,7 @@ struct SettingsView: View {
                     Text("Actions")
                         .font(.headline)
                 } footer: {
-                    Text("Each action has its own instruction and shortcut. The selected text is appended securely and treated as content rather than an instruction.")
+                    Text("Each action has its own instruction and one or more shortcuts. The selected text is appended securely and treated as content rather than an instruction.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -171,15 +171,21 @@ private struct ActionEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                TextField("Name", text: $action.name)
+                TextField("Name, shown in the capsule while it runs", text: $action.name)
                     .textFieldStyle(.roundedBorder)
-                ShortcutRecorder(shortcut: $action.shortcut, onChange: onShortcutChange)
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "minus.circle")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canRemove)
                 .help("Remove this action")
+            }
+
+            HStack(spacing: 6) {
+                ForEach(action.shortcuts, id: \.self) { shortcut in
+                    ShortcutRecorder(shortcut: binding(for: shortcut), onChange: onShortcutChange)
+                }
+                ShortcutRecorder(shortcut: newShortcutBinding, placeholder: "Add Shortcut", onChange: onShortcutChange)
             }
 
             TextEditor(text: $action.prompt)
@@ -193,6 +199,30 @@ private struct ActionEditor: View {
                 }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Edits one existing shortcut in place; clearing it removes it.
+    private func binding(for shortcut: GlobalShortcut) -> Binding<GlobalShortcut?> {
+        Binding(
+            get: { shortcut },
+            set: { replacement in
+                guard let index = action.shortcuts.firstIndex(of: shortcut) else { return }
+                if let replacement {
+                    action.shortcuts[index] = replacement
+                } else {
+                    action.shortcuts.remove(at: index)
+                }
+            }
+        )
+    }
+
+    private var newShortcutBinding: Binding<GlobalShortcut?> {
+        Binding(
+            get: { nil },
+            set: { recorded in
+                if let recorded { action.addShortcut(recorded) }
+            }
+        )
     }
 }
 
@@ -243,6 +273,7 @@ private struct APIProviderPicker: View {
 
 private struct ShortcutRecorder: View {
     @Binding var shortcut: GlobalShortcut?
+    var placeholder = "Record Shortcut"
     let onChange: () -> Void
 
     @State private var isRecording = false
@@ -278,7 +309,7 @@ private struct ShortcutRecorder: View {
 
     private var label: String {
         if isRecording { return "Press shortcut…" }
-        return shortcut?.displayString ?? "Record Shortcut"
+        return shortcut?.displayString ?? placeholder
     }
 
     private func beginRecording() {

@@ -47,6 +47,13 @@ protocol AccessibilityProviding {
     func selectedText(of element: AXUIElement) -> String?
     func value(of element: AXUIElement) -> String?
     func setSelectedText(_ text: String, of element: AXUIElement) -> Bool
+    /// The frame of the window holding the focused element, in Accessibility
+    /// coordinates: origin at the top-left of the primary display, y downward.
+    func focusedWindowFrame() -> CGRect?
+}
+
+extension AccessibilityProviding {
+    func focusedWindowFrame() -> CGRect? { nil }
 }
 
 protocol KeyboardSending {
@@ -90,11 +97,36 @@ struct SystemAccessibility: AccessibilityProviding {
         ) == .success
     }
 
+    func focusedWindowFrame() -> CGRect? {
+        guard let element = focusedElement() else { return nil }
+        var windowValue: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(element, kAXWindowAttribute as CFString, &windowValue)
+        guard status == .success, let windowValue else { return nil }
+        let window = windowValue as! AXUIElement
+
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard let position = axValue(kAXPositionAttribute, of: window),
+              let dimensions = axValue(kAXSizeAttribute, of: window),
+              AXValueGetValue(position, .cgPoint, &origin),
+              AXValueGetValue(dimensions, .cgSize, &size) else {
+            return nil
+        }
+        return CGRect(origin: origin, size: size)
+    }
+
     private func attribute(_ name: String, of element: AXUIElement) -> String? {
         var value: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, name as CFString, &value)
         guard status == .success else { return nil }
         return value as? String
+    }
+
+    private func axValue(_ name: String, of element: AXUIElement) -> AXValue? {
+        var value: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(element, name as CFString, &value)
+        guard status == .success, let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        return (value as! AXValue)
     }
 }
 
@@ -174,6 +206,24 @@ final class SelectionService {
         self.frontmostApplication = frontmostApplication
         self.isApplicationActive = isApplicationActive
         self.sleep = sleep
+    }
+
+    /// Where the text being edited lives, in AppKit screen coordinates.
+    func focusedWindowFrame() -> NSRect? {
+        guard let frame = accessibility.focusedWindowFrame(),
+              let primaryScreen = NSScreen.screens.first else { return nil }
+        return Self.appKitRect(from: frame, primaryScreenHeight: primaryScreen.frame.height)
+    }
+
+    /// Accessibility measures from the top-left of the primary display and
+    /// AppKit from its bottom-left, so only the vertical axis flips.
+    static func appKitRect(from accessibilityRect: CGRect, primaryScreenHeight: CGFloat) -> NSRect {
+        NSRect(
+            x: accessibilityRect.minX,
+            y: primaryScreenHeight - accessibilityRect.maxY,
+            width: accessibilityRect.width,
+            height: accessibilityRect.height
+        )
     }
 
     func captureSelection() async throws -> CapturedSelection {

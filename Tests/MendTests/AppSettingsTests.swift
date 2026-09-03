@@ -24,7 +24,7 @@ struct AppSettingsTests {
         #expect(settings.actions.count == 1)
         #expect(settings.actions[0].name == "Fix grammar")
         #expect(settings.actions[0].prompt == AppSettings.defaultPrompt)
-        #expect(settings.actions[0].shortcut == .default)
+        #expect(settings.actions[0].shortcuts == [.default])
         #expect(settings.actions[0].workingLabel == "Fix grammar…")
     }
 
@@ -39,7 +39,37 @@ struct AppSettingsTests {
 
         #expect(settings.actions.count == 1)
         #expect(settings.actions[0].prompt == "Translate to French.")
-        #expect(settings.actions[0].shortcut == shortcut)
+        #expect(settings.actions[0].shortcuts == [shortcut])
+    }
+
+    @Test("Actions saved with a single shortcut load with it as their only shortcut")
+    func testSingleShortcutMigration() throws {
+        let defaults = makeDefaults()
+        let saved = """
+        [{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Fix grammar","prompt":"Fix it.",
+          "shortcut":{"keyCode":5,"modifiers":6144,"keyLabel":"G"}},
+         {"id":"7F9619FF-8B86-D011-B42D-00C04FC964FF","name":"New action","prompt":"Fix it.","shortcuts":[]}]
+        """
+        defaults.set(Data(saved.utf8), forKey: "rewriteActions")
+
+        let settings = makeSettings(defaults)
+
+        #expect(settings.actions[0].shortcuts == [.default])
+        #expect(settings.actions[1].name == "")
+        #expect(settings.actions[1].workingLabel == "Rewriting…")
+    }
+
+    @Test("An action can have several shortcuts, without duplicates")
+    func testSeveralShortcuts() throws {
+        let defaults = makeDefaults()
+        let settings = makeSettings(defaults)
+        let second = GlobalShortcut(keyCode: UInt32(kVK_F5), modifiers: 0, keyLabel: "F5")
+        settings.actions[0].addShortcut(second)
+        settings.actions[0].addShortcut(.default)
+        try settings.save()
+
+        let reloaded = makeSettings(defaults)
+        #expect(reloaded.actions[0].shortcuts == [.default, second])
     }
 
     @Test("Actions round-trip through save and the last one cannot be removed")
@@ -47,9 +77,10 @@ struct AppSettingsTests {
         let defaults = makeDefaults()
         let settings = makeSettings(defaults)
         settings.addAction()
+        #expect(settings.actions[1].workingLabel == "Rewriting…")
         settings.actions[1].name = "Tighten"
         settings.actions[1].prompt = "Make it shorter."
-        settings.actions[1].shortcut = GlobalShortcut(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey), keyLabel: "T")
+        settings.actions[1].shortcuts = [GlobalShortcut(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey), keyLabel: "T")]
         try settings.save()
 
         let reloaded = makeSettings(defaults)

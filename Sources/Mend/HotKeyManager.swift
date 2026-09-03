@@ -2,7 +2,7 @@ import Carbon
 import AppKit
 import Foundation
 
-struct GlobalShortcut: Codable, Equatable {
+struct GlobalShortcut: Codable, Hashable {
     let keyCode: UInt32
     let modifiers: UInt32
     let keyLabel: String

@@ -31,7 +31,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     private var localMenuClickMonitor: Any?
     private var globalMenuClickMonitor: Any?
     private var isStatusMenuOpen = false
-    private var hotKeys: [UUID: HotKeyManager] = [:]
+    private var hotKeys: [HotKeyManager] = []
     private var registeredActions: [RewriteAction] = []
     private var settingsWindow: NSWindow?
     private var activeTask: Task<Void, Never>?
@@ -179,13 +179,14 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         }
     }
 
-    private func handleShortcut(for actionID: UUID) {
+    private func handleShortcut(for actionID: UUID, via shortcut: GlobalShortcut) {
         guard let action = settings.action(id: actionID) else { return }
+        overlay.anchorFrame = selectionService.focusedWindowFrame()
 
         if let activeTask {
             activeTask.cancel()
             self.activeTask = nil
-            overlay.show(.message("Cancelled"), autoHideAfter: 1.2)
+            overlay.show(.message("Cancelled", symbol: "xmark.circle.fill"), autoHideAfter: 1.2)
             return
         }
 
@@ -217,13 +218,15 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
                 let result = try await rewrite(
                     selection.text,
-                    using: providerConfigurations
+                    using: providerConfigurations,
+                    for: action,
+                    via: shortcut
                 )
                 try Task.checkCancellation()
 
                 guard result.trimmingCharacters(in: .whitespacesAndNewlines)
                     != selection.text.trimmingCharacters(in: .whitespacesAndNewlines) else {
-                    overlay.show(.message("No changes suggested"), autoHideAfter: 2)
+                    overlay.show(.message("No changes suggested", symbol: "equal.circle.fill"), autoHideAfter: 2)
                     activeTask = nil
                     return
                 }
@@ -233,10 +236,10 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
                 case .verified:
                     overlay.show(.success("Fixed"), autoHideAfter: 1.2)
                 case .unverified:
-                    overlay.show(.message("Pasted — check the result"), autoHideAfter: 2.5)
+                    overlay.show(.message("Pasted — check the result", symbol: "doc.on.clipboard.fill"), autoHideAfter: 2.5)
                 }
             } catch is CancellationError {
-                overlay.show(.message("Cancelled"), autoHideAfter: 1.2)
+                overlay.show(.message("Cancelled", symbol: "xmark.circle.fill"), autoHideAfter: 1.2)
             } catch {
                 overlay.show(.failure(error.localizedDescription), autoHideAfter: 5)
             }
@@ -247,16 +250,24 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
     private func rewrite(
         _ text: String,
-        using configurations: [ProviderConfiguration]
+        using configurations: [ProviderConfiguration],
+        for action: RewriteAction,
+        via shortcut: GlobalShortcut
     ) async throws -> String {
         var attemptedProviders: [LLMProvider] = []
         var lastError: (any Error)?
 
         for (index, configuration) in configurations.enumerated() {
             try Task.checkCancellation()
+            let label: String
             if index > 0 {
-                overlay.show(.working("Trying \(configuration.provider.displayName)…"))
+                label = "Trying \(configuration.provider.displayName)…"
+                overlay.show(.working(label))
+            } else {
+                label = action.workingLabel
             }
+            let narrator = narrateWait(label: label, provider: configuration.provider, shortcut: shortcut)
+            defer { narrator.cancel() }
 
             attemptedProviders.append(configuration.provider)
             do {
@@ -277,6 +288,20 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             throw lastError
         }
         throw CoordinatorError.providersFailed(attemptedProviders, lastError)
+    }
+
+    /// Keeps a long wait honest. After two seconds the capsule shows how to
+    /// cancel, and after five it names the provider it is waiting on.
+    private func narrateWait(label: String, provider: LLMProvider, shortcut: GlobalShortcut) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            let hint = " · \(shortcut.displayString) to cancel"
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.overlay.show(.working(label + hint))
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.overlay.show(.working("Waiting for \(provider.displayName)…" + hint))
+        }
     }
 
     @objc func openSettings() {
@@ -317,16 +342,16 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     /// the previous set so the user keeps working shortcuts.
     @discardableResult
     private func registerShortcuts(for actions: [RewriteAction]) -> RewriteAction? {
-        if actions == registeredActions, hotKeys.count == actions.filter({ $0.shortcut != nil }).count {
+        if actions == registeredActions, hotKeys.count == actions.reduce(0, { $0 + $1.shortcuts.count }) {
             return nil
         }
 
         let previousActions = registeredActions
-        hotKeys = [:]
+        hotKeys = []
         registeredActions = []
 
         if let unavailable = installHotKeys(for: actions) {
-            hotKeys = [:]
+            hotKeys = []
             installHotKeys(for: previousActions)
             registeredActions = previousActions
             return unavailable
@@ -339,11 +364,12 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     @discardableResult
     private func installHotKeys(for actions: [RewriteAction]) -> RewriteAction? {
         for action in actions {
-            guard let shortcut = action.shortcut else { continue }
-            guard let hotKey = makeHotKey(for: shortcut, actionID: action.id) else {
-                return action
+            for shortcut in action.shortcuts {
+                guard let hotKey = makeHotKey(for: shortcut, actionID: action.id) else {
+                    return action
+                }
+                hotKeys.append(hotKey)
             }
-            hotKeys[action.id] = hotKey
         }
         return nil
     }
@@ -351,7 +377,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     private func makeHotKey(for shortcut: GlobalShortcut, actionID: UUID) -> HotKeyManager? {
         HotKeyManager(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers) { [weak self] in
             Task { @MainActor in
-                self?.handleShortcut(for: actionID)
+                self?.handleShortcut(for: actionID, via: shortcut)
             }
         }
     }
@@ -362,8 +388,9 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     }
 
     @objc private func showTestPill() {
+        overlay.anchorFrame = nil
         Task { @MainActor in
-            overlay.show(.working("Fixing grammar…"))
+            overlay.show(.working("Fix grammar…"))
             try? await Task.sleep(nanoseconds: 1_400_000_000)
             overlay.show(.success("Fixed"))
             try? await Task.sleep(nanoseconds: 1_100_000_000)
@@ -374,6 +401,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     }
 
     @objc private func checkForUpdates() {
+        overlay.anchorFrame = nil
         Task { @MainActor in
             overlay.show(.working("Checking for updates…"))
             let alert = NSAlert()
@@ -398,7 +426,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
                 alert.addButton(withTitle: "OK")
             }
 
-            overlay.show(.message("Checked for updates"), autoHideAfter: 0.8)
+            overlay.show(.message("Checked for updates", symbol: "arrow.triangle.2.circlepath.circle.fill"), autoHideAfter: 0.8)
             NSApplication.shared.activate(ignoringOtherApps: true)
             if alert.runModal() == .alertFirstButtonReturn, let downloadURL {
                 NSWorkspace.shared.open(downloadURL)

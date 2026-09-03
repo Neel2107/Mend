@@ -25,7 +25,7 @@ Mend is a lightweight macOS writing assistant. Select text in any application, p
 - Supports OpenAI, Gemini, and custom OpenAI-compatible endpoints
 - Falls back to another configured provider when a request fails
 - Stores API keys in macOS Keychain
-- Lets you save several actions, each with its own instruction and shortcut: fix grammar, tighten, translate
+- Lets you save several actions, each with its own instruction and one or more shortcuts: fix grammar, tighten, translate
 - Lets you customize the endpoint and model
 - Shows compact progress and result notifications without interrupting your workflow
 - Restores clipboard contents after capturing and replacing text
@@ -64,7 +64,7 @@ For Gatekeeper, permissions, and release details, see the [installation guide](d
 3. Enter the API key, confirm the endpoint and model, and select **Save**. A custom endpoint can be saved without a key for local servers such as Ollama or LM Studio.
 4. Allow Mend under **System Settings → Privacy & Security → Accessibility**.
 5. Configure the shortcut for **Fix grammar** if you do not want the default, **Control–Option–G**.
-6. Add more actions under **Actions**, each with its own instruction and shortcut.
+6. Add more actions under **Actions**, each with its own instruction. An action can have several shortcuts.
 
 Mend stores a separate Keychain entry for each provider. Turn on **Open Mend at login** in Settings to keep it running after a restart.
 

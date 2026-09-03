@@ -43,13 +43,15 @@ The app rebuilds and relaunches, then cycles through working, success, and error
 
 ## Position
 
-The bottom-right position is calculated in `positionPanel()`:
+The capsule sits in the bottom-right corner of the window being edited, read through Accessibility when the shortcut fires, and falls back to the screen corner when the window is unavailable or smaller than `OverlayDesign.minimumAnchorSize`. The frame is computed in `OverlayController.panelFrame(width:height:anchor:within:)`, which the placement tests cover:
 
 ```swift
-x: frame.maxX - panel.frame.width - OverlayDesign.trailingMargin
-y: frame.minY + OverlayDesign.bottomMargin
+x: container.maxX - width - OverlayDesign.trailingMargin
+y: container.minY + OverlayDesign.bottomMargin
 ```
 
-For bottom-center, use `frame.midX - panel.frame.width / 2` for `x`. For bottom-left, use `frame.minX + OverlayDesign.trailingMargin`.
+For bottom-center, use `container.midX - width / 2` for `x`. For bottom-left, use `container.minX + OverlayDesign.trailingMargin`. Setting `overlay.anchorFrame = nil` before `show` forces the screen corner.
+
+Failure states may grow to `OverlayDesign.maximumFailurePanelWidth` so error messages stay readable; other states cap at `maximumPanelWidth`.
 
 Mend intentionally avoids entrance animation because the overlay may appear hundreds of times per day. Immediate feedback feels faster for a keyboard-driven action.

@@ -6,8 +6,12 @@ enum OverlayDesign {
     static let initialPanelSize = NSSize(width: 210, height: 42)
     static let minimumPanelWidth: CGFloat = 88
     static let maximumPanelWidth: CGFloat = 320
+    /// Errors need room to be read before they disappear.
+    static let maximumFailurePanelWidth: CGFloat = 520
     static let trailingMargin: CGFloat = 20
     static let bottomMargin: CGFloat = 18
+    /// Windows smaller than this get the screen corner instead of their own.
+    static let minimumAnchorSize = NSSize(width: 360, height: 160)
 
     static let horizontalPadding: CGFloat = 11
     static let contentSpacing: CGFloat = 8
@@ -23,7 +27,7 @@ enum OverlayState: Equatable {
     case working(String)
     case success(String)
     case failure(String)
-    case message(String)
+    case message(String, symbol: String = "text.badge.checkmark")
 }
 
 @MainActor
@@ -97,6 +101,10 @@ final class OverlayController {
     private var hideTask: Task<Void, Never>?
     private var presentationTask: Task<Void, Never>?
     private var isPresentationPending = false
+
+    /// The window the user is editing, in AppKit screen coordinates. When
+    /// set, the capsule sits in that window's corner instead of the screen's.
+    var anchorFrame: NSRect?
 
     init() {
         let model = OverlayModel()
@@ -191,26 +199,55 @@ final class OverlayController {
     private func resizeAndPositionPanel(for state: OverlayState, animated: Bool) {
         // NSScreen.main follows the window of the currently active writing app.
         // The panel never activates Mend, so this remains the user's working screen.
-        let screen = NSScreen.main
-        guard let frame = screen?.visibleFrame else { return }
+        let screen = anchorFrame.flatMap { anchor in
+            NSScreen.screens.first { $0.frame.intersects(anchor) }
+        } ?? NSScreen.main
+        guard let visibleFrame = screen?.visibleFrame else { return }
 
-        let width = targetWidth(for: state)
-        // Keep the trailing edge visually fixed while the capsule grows or shrinks.
-        let anchoredFrame = NSRect(
-            x: frame.maxX - width - OverlayDesign.trailingMargin,
-            y: frame.minY + OverlayDesign.bottomMargin,
-            width: width,
-            height: OverlayDesign.initialPanelSize.height
+        let frame = Self.panelFrame(
+            width: targetWidth(for: state),
+            height: OverlayDesign.initialPanelSize.height,
+            anchor: anchorFrame,
+            within: visibleFrame
         )
+        panel.setOverlayFrame(frame, animated: animated)
+    }
 
-        panel.setOverlayFrame(anchoredFrame, animated: animated)
+    /// The capsule's frame: the bottom-right corner of the anchored window,
+    /// or of the screen when there is no usable window. Keeping the trailing
+    /// edge fixed lets the capsule grow and shrink in place.
+    nonisolated static func panelFrame(width: CGFloat, height: CGFloat, anchor: NSRect?, within visibleFrame: NSRect) -> NSRect {
+        var container = visibleFrame
+        if let anchor,
+           anchor.width >= OverlayDesign.minimumAnchorSize.width,
+           anchor.height >= OverlayDesign.minimumAnchorSize.height {
+            // A window hanging off the screen still gets an on-screen capsule.
+            let visible = anchor.intersection(visibleFrame)
+            if !visible.isNull,
+               visible.width >= width + OverlayDesign.trailingMargin * 2,
+               visible.height >= height + OverlayDesign.bottomMargin * 2 {
+                container = visible
+            }
+        }
+
+        return NSRect(
+            x: container.maxX - width - OverlayDesign.trailingMargin,
+            y: container.minY + OverlayDesign.bottomMargin,
+            width: width,
+            height: height
+        )
     }
 
     private func targetWidth(for state: OverlayState) -> CGFloat {
         let label: String
+        let maximumWidth: CGFloat
         switch state {
-        case .working(let text), .success(let text), .failure(let text), .message(let text):
+        case .failure(let text):
             label = text
+            maximumWidth = OverlayDesign.maximumFailurePanelWidth
+        case .working(let text), .success(let text), .message(let text, _):
+            label = text
+            maximumWidth = OverlayDesign.maximumPanelWidth
         }
 
         let font = NSFont.systemFont(ofSize: OverlayDesign.labelFontSize, weight: .medium)
@@ -220,10 +257,7 @@ final class OverlayController {
             + OverlayDesign.contentSpacing
             + labelWidth
 
-        return min(
-            max(width, OverlayDesign.minimumPanelWidth),
-            OverlayDesign.maximumPanelWidth
-        )
+        return min(max(width, OverlayDesign.minimumPanelWidth), maximumWidth)
     }
 }
 
@@ -268,8 +302,8 @@ private struct OverlayView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.orange)
-        case .message:
-            Image(systemName: "text.badge.checkmark")
+        case .message(_, let symbol):
+            Image(systemName: symbol)
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
         }
@@ -277,7 +311,7 @@ private struct OverlayView: View {
 
     private var label: String {
         switch model.state {
-        case .working(let text), .success(let text), .failure(let text), .message(let text):
+        case .working(let text), .success(let text), .failure(let text), .message(let text, _):
             return text
         }
     }

@@ -43,18 +43,51 @@ enum LLMProvider: String, CaseIterable, Identifiable {
     }
 }
 
-/// One thing Mend can do to a selection: an instruction and the shortcut that runs it.
+/// One thing Mend can do to a selection: an instruction and the shortcuts that run it.
 struct RewriteAction: Codable, Identifiable, Equatable {
     var id: UUID
     var name: String
     var prompt: String
-    var shortcut: GlobalShortcut?
+    var shortcuts: [GlobalShortcut]
 
-    init(id: UUID = UUID(), name: String, prompt: String, shortcut: GlobalShortcut?) {
+    init(id: UUID = UUID(), name: String, prompt: String, shortcuts: [GlobalShortcut]) {
         self.id = id
         self.name = name
         self.prompt = prompt
-        self.shortcut = shortcut
+        self.shortcuts = shortcuts
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, prompt, shortcuts
+        case legacyShortcut = "shortcut"
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        if let saved = try container.decodeIfPresent([GlobalShortcut].self, forKey: .shortcuts) {
+            shortcuts = saved
+        } else if let single = try container.decodeIfPresent(GlobalShortcut.self, forKey: .legacyShortcut) {
+            // Actions saved before an action could have several shortcuts.
+            shortcuts = [single]
+        } else {
+            shortcuts = []
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(prompt, forKey: .prompt)
+        try container.encode(shortcuts, forKey: .shortcuts)
+    }
+
+    mutating func addShortcut(_ shortcut: GlobalShortcut) {
+        guard !shortcuts.contains(shortcut) else { return }
+        shortcuts.append(shortcut)
     }
 
     var displayName: String {
@@ -62,11 +95,15 @@ struct RewriteAction: Codable, Identifiable, Equatable {
         return trimmed.isEmpty ? "Rewrite" : trimmed
     }
 
-    /// What the overlay shows while this action runs.
-    var workingLabel: String { "\(displayName)…" }
+    /// What the capsule shows while this action runs: the action's name, or
+    /// a neutral verb when it has none yet.
+    var workingLabel: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Rewriting…" : "\(trimmed)…"
+    }
 
     static func makeDefault() -> RewriteAction {
-        RewriteAction(name: "Fix grammar", prompt: AppSettings.defaultPrompt, shortcut: .default)
+        RewriteAction(name: "Fix grammar", prompt: AppSettings.defaultPrompt, shortcuts: [.default])
     }
 }
 
@@ -138,7 +175,12 @@ final class AppSettings: ObservableObject {
         if let data = defaults.data(forKey: Key.actions),
            let saved = try? JSONDecoder().decode([RewriteAction].self, from: data),
            !saved.isEmpty {
-            return saved
+            // Earlier builds named new actions "New action" and showed that in the capsule.
+            return saved.map { action in
+                var action = action
+                if action.name == "New action" { action.name = "" }
+                return action
+            }
         }
 
         var migrated = RewriteAction.makeDefault()
@@ -147,7 +189,7 @@ final class AppSettings: ObservableObject {
         }
         if let data = defaults.data(forKey: Key.legacyShortcut),
            let shortcut = try? JSONDecoder().decode(GlobalShortcut.self, from: data) {
-            migrated.shortcut = shortcut
+            migrated.shortcuts = [shortcut]
         }
         return [migrated]
     }
@@ -155,7 +197,7 @@ final class AppSettings: ObservableObject {
     // MARK: Actions
 
     func addAction() {
-        actions.append(RewriteAction(name: "New action", prompt: Self.defaultPrompt, shortcut: nil))
+        actions.append(RewriteAction(name: "", prompt: Self.defaultPrompt, shortcuts: []))
     }
 
     func removeAction(id: UUID) {
