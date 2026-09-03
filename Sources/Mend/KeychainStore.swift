@@ -12,6 +12,22 @@ enum KeychainError: LocalizedError {
     }
 }
 
+/// Reads and writes generic-password items. Saving an empty value deletes the item.
+protocol KeychainAccess {
+    func read(service: String, account: String) -> String?
+    func save(_ value: String, service: String, account: String) throws
+}
+
+struct SystemKeychain: KeychainAccess {
+    func read(service: String, account: String) -> String? {
+        KeychainStore.read(service: service, account: account)
+    }
+
+    func save(_ value: String, service: String, account: String) throws {
+        try KeychainStore.save(value, service: service, account: account)
+    }
+}
+
 enum KeychainStore {
     static func read(service: String, account: String) -> String? {
         let query: [String: Any] = [

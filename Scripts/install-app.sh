@@ -51,7 +51,7 @@ release_url() {
 verify_archive() {
   sums_url="$(release_url SHA256SUMS)"
   sums_path="$TEMP_DIR/SHA256SUMS"
-  status="$(curl -sSL -o "$sums_path" -w '%{http_code}' "$sums_url" 2>/dev/null)" || status="000"
+  status="$(curl -sSL --connect-timeout 10 --retry 2 -o "$sums_path" -w '%{http_code}' "$sums_url" 2>/dev/null)" || status="000"
 
   [ "$status" = "200" ] || fail "could not download release checksums (HTTP $status)"
 
@@ -85,7 +85,7 @@ ARCHIVE_PATH="${MEND_APP_ARCHIVE:-$TEMP_DIR/$ASSET_NAME}"
 if [ -z "${MEND_APP_ARCHIVE:-}" ]; then
   DOWNLOAD_URL="$(release_url "$ASSET_NAME")"
   echo "Downloading $DOWNLOAD_URL"
-  curl -fL "$DOWNLOAD_URL" -o "$ARCHIVE_PATH"
+  curl -fL --connect-timeout 10 --retry 2 "$DOWNLOAD_URL" -o "$ARCHIVE_PATH"
   verify_archive
 fi
 

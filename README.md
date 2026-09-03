@@ -61,7 +61,7 @@ For Gatekeeper, permissions, and release details, see the [installation guide](d
 5. Configure the shortcut for **Fix grammar** if you do not want the default, **Control–Option–G**.
 6. Add more actions under **Actions**, each with its own instruction. An action can have several shortcuts.
 
-Mend stores a separate Keychain entry for each provider. Turn on **Open Mend at login** in Settings to keep it running after a restart.
+Mend keeps every provider key in one macOS Keychain item. When macOS asks whether Mend may use it, choose **Always Allow** so it does not ask again after updates. Turn on **Open Mend at login** in Settings to keep it running after a restart.
 
 ## Usage
 

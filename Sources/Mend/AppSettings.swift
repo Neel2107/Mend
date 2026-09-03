@@ -132,29 +132,26 @@ final class AppSettings: ObservableObject {
     @Published private(set) var showsMenuBarIcon: Bool
     @Published private(set) var launchesAtLogin: Bool
 
+    /// Every provider's key, read from the Keychain once at launch.
     private var draftAPIKeys: [LLMProvider: String] = [:]
     private let defaults: UserDefaults
+    private let keyStore: ProviderKeyStore
     private let usesKeychain: Bool
 
-    init(readsAPIKeyFromKeychain: Bool = true, defaults: UserDefaults = .standard) {
+    init(
+        readsAPIKeyFromKeychain: Bool = true,
+        defaults: UserDefaults = .standard,
+        keychain: any KeychainAccess = SystemKeychain()
+    ) {
         self.defaults = defaults
+        keyStore = ProviderKeyStore(keychain: keychain)
         usesKeychain = readsAPIKeyFromKeychain
         let savedEndpoint = defaults.string(forKey: Key.endpoint)
         let savedProviderValue = defaults.string(forKey: Key.provider)
         let savedProvider = savedProviderValue
             .flatMap(LLMProvider.init(rawValue:))
             ?? Self.inferProvider(from: savedEndpoint)
-        let savedAPIKey: String
-        if readsAPIKeyFromKeychain {
-            savedAPIKey = KeychainStore.read(
-                service: "com.mend.api",
-                account: Self.keyAccount(for: savedProvider)
-            ) ?? (savedProviderValue == nil
-                ? KeychainStore.read(service: "com.mend.api", account: "provider-key")
-                : nil) ?? ""
-        } else {
-            savedAPIKey = ""
-        }
+        let savedKeys = readsAPIKeyFromKeychain ? keyStore.load() : [:]
 
         provider = savedProvider
         endpoint = savedEndpoint ?? savedProvider.defaultEndpoint ?? ""
@@ -165,10 +162,10 @@ final class AppSettings: ObservableObject {
             model = savedModel ?? savedProvider.defaultModel ?? ""
         }
         actions = Self.loadActions(from: defaults)
-        apiKey = savedAPIKey
+        apiKey = savedKeys[savedProvider] ?? ""
         showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
         launchesAtLogin = LoginItem.isEnabled
-        draftAPIKeys[savedProvider] = savedAPIKey
+        draftAPIKeys = savedKeys
     }
 
     private static func loadActions(from defaults: UserDefaults) -> [RewriteAction] {
@@ -240,11 +237,7 @@ final class AppSettings: ObservableObject {
             model = defaultModel
         }
 
-        apiKey = draftAPIKeys[newProvider]
-            ?? (usesKeychain
-                ? KeychainStore.read(service: "com.mend.api", account: Self.keyAccount(for: newProvider))
-                : nil)
-            ?? ""
+        apiKey = draftAPIKeys[newProvider] ?? ""
         draftAPIKeys[newProvider] = apiKey
     }
 
@@ -291,17 +284,7 @@ final class AppSettings: ObservableObject {
     }
 
     private func storedAPIKey(for provider: LLMProvider) -> String {
-        if let cachedKey = draftAPIKeys[provider] {
-            return cachedKey
-        }
-        guard usesKeychain else { return "" }
-
-        let savedKey = KeychainStore.read(
-            service: "com.mend.api",
-            account: Self.keyAccount(for: provider)
-        ) ?? ""
-        draftAPIKeys[provider] = savedKey
-        return savedKey
+        draftAPIKeys[provider] ?? ""
     }
 
     // MARK: Saving
@@ -313,14 +296,8 @@ final class AppSettings: ObservableObject {
         defaults.set(try JSONEncoder().encode(actions), forKey: Key.actions)
         draftAPIKeys[provider] = apiKey
         guard usesKeychain else { return }
-        // Keys typed for other providers before switching back are kept too.
-        for (candidate, key) in draftAPIKeys {
-            try KeychainStore.save(key, service: "com.mend.api", account: Self.keyAccount(for: candidate))
-        }
-    }
-
-    private static func keyAccount(for provider: LLMProvider) -> String {
-        "provider-key-\(provider.rawValue)"
+        // One item holds every provider's key, including ones typed before switching back.
+        try keyStore.save(draftAPIKeys)
     }
 
     private static func inferProvider(from endpoint: String?) -> LLMProvider {

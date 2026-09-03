@@ -3,6 +3,29 @@ import Foundation
 @testable import Mend
 import Testing
 
+/// An in-memory keychain that records every read, so tests can count prompts.
+private final class FakeKeychain: KeychainAccess {
+    var items: [String: String]
+    private(set) var reads: [String] = []
+
+    init(items: [String: String] = [:]) {
+        self.items = items
+    }
+
+    func read(service: String, account: String) -> String? {
+        reads.append(account)
+        return items[account]
+    }
+
+    func save(_ value: String, service: String, account: String) throws {
+        if value.isEmpty {
+            items.removeValue(forKey: account)
+        } else {
+            items[account] = value
+        }
+    }
+}
+
 @MainActor
 @Suite("App settings")
 struct AppSettingsTests {
@@ -122,5 +145,44 @@ struct AppSettingsTests {
         #expect(settings.apiKey == "openai-key")
         let providers = settings.availableProviderConfigurations(prompt: "p").map(\.provider)
         #expect(providers == [.openAI, .gemini])
+    }
+
+    @Test("Keys live in one Keychain item and are read once at launch")
+    func testSingleKeychainItem() throws {
+        let keychain = FakeKeychain()
+        let defaults = makeDefaults()
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: defaults, keychain: keychain)
+        settings.apiKey = "openai-key"
+        settings.selectProvider(.gemini)
+        settings.apiKey = "gemini-key"
+        try settings.save()
+
+        #expect(keychain.items.keys.sorted() == ["provider-keys"])
+        #expect(ProviderKeyStore.decode(keychain.items["provider-keys"]!) == [.openAI: "openai-key", .gemini: "gemini-key"])
+
+        let reloaded = AppSettings(readsAPIKeyFromKeychain: true, defaults: defaults, keychain: keychain)
+        #expect(reloaded.apiKey == "gemini-key")
+        reloaded.selectProvider(.openAI)
+        #expect(reloaded.apiKey == "openai-key")
+        #expect(keychain.reads.filter { $0 == "provider-keys" }.count == 2)
+    }
+
+    @Test("Per-provider items from older builds merge into the single item once")
+    func testLegacyKeychainMigration() {
+        let keychain = FakeKeychain(items: [
+            "provider-key-openAI": "openai-key",
+            "provider-key-custom": "local-key",
+        ])
+        let defaults = makeDefaults()
+
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: defaults, keychain: keychain)
+
+        #expect(settings.apiKey == "openai-key")
+        #expect(keychain.items.keys.sorted() == ["provider-keys"])
+        #expect(ProviderKeyStore.decode(keychain.items["provider-keys"]!) == [.openAI: "openai-key", .custom: "local-key"])
+
+        let readsBefore = keychain.reads.count
+        _ = AppSettings(readsAPIKeyFromKeychain: true, defaults: defaults, keychain: keychain)
+        #expect(keychain.reads.count == readsBefore + 1)
     }
 }

@@ -134,7 +134,7 @@ struct SettingsView: View {
         case .openAI:
             return "Uses OpenAI's chat-completions API. Your key is stored in macOS Keychain."
         case .gemini:
-            return "Uses Google's OpenAI-compatible Gemini endpoint. Your Gemini key is stored separately in macOS Keychain."
+            return "Uses Google's OpenAI-compatible Gemini endpoint. Your key is stored in macOS Keychain."
         case .custom:
             return "Uses an OpenAI-compatible chat-completions endpoint. Leave the key empty for local servers that do not need one."
         }
