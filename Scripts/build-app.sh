@@ -7,7 +7,7 @@ APP_DIR="$PROJECT_DIR/dist/Mend.app"
 CONFIGURATION="${CONFIGURATION:-release}"
 
 cd "$PROJECT_DIR"
-swift build -c "$CONFIGURATION"
+swift build -c "$CONFIGURATION" >&2
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"

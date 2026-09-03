@@ -1,6 +1,20 @@
 import AppKit
 import SwiftUI
 
+// Change these values to explore the overlay without touching its behavior.
+enum OverlayDesign {
+    static let panelSize = NSSize(width: 272, height: 46)
+    static let trailingMargin: CGFloat = 20
+    static let bottomMargin: CGFloat = 18
+
+    static let horizontalPadding: CGFloat = 13
+    static let contentSpacing: CGFloat = 9
+    static let iconSize: CGFloat = 18
+    static let labelFontSize: CGFloat = 13
+    static let shortcutFontSize: CGFloat = 10
+    static let borderOpacity: CGFloat = 0.12
+}
+
 enum OverlayState: Equatable {
     case working(String)
     case success(String)
@@ -26,7 +40,7 @@ final class OverlayController {
 
     init() {
         panel = NonActivatingPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 330, height: 54),
+            contentRect: NSRect(origin: .zero, size: OverlayDesign.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -65,8 +79,8 @@ final class OverlayController {
         guard let frame = screen?.visibleFrame else { return }
 
         let origin = NSPoint(
-            x: frame.midX - panel.frame.width / 2,
-            y: frame.minY + 24
+            x: frame.maxX - panel.frame.width - OverlayDesign.trailingMargin,
+            y: frame.minY + OverlayDesign.bottomMargin
         )
         panel.setFrameOrigin(origin)
     }
@@ -76,12 +90,12 @@ private struct OverlayView: View {
     @ObservedObject var model: OverlayModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OverlayDesign.contentSpacing) {
             icon
-                .frame(width: 22, height: 22)
+                .frame(width: OverlayDesign.iconSize, height: OverlayDesign.iconSize)
 
             Text(label)
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(size: OverlayDesign.labelFontSize, weight: .medium, design: .rounded))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -89,16 +103,16 @@ private struct OverlayView: View {
             Spacer(minLength: 4)
 
             if case .working = model.state {
-                Text("⌃⌥G to cancel")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                Text("⌃⌥G")
+                    .font(.system(size: OverlayDesign.shortcutFontSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 16)
-        .frame(width: 330, height: 54)
+        .padding(.horizontal, OverlayDesign.horizontalPadding)
+        .frame(width: OverlayDesign.panelSize.width, height: OverlayDesign.panelSize.height)
         .background(.ultraThickMaterial, in: Capsule())
         .overlay {
-            Capsule().strokeBorder(.white.opacity(0.13), lineWidth: 1)
+            Capsule().strokeBorder(.white.opacity(OverlayDesign.borderOpacity), lineWidth: 1)
         }
     }
 
@@ -106,7 +120,7 @@ private struct OverlayView: View {
     private var icon: some View {
         switch model.state {
         case .working:
-            ProgressView().controlSize(.small)
+            ProgressView().controlSize(.mini)
         case .success:
             Image(systemName: "checkmark.circle.fill")
                 .symbolRenderingMode(.hierarchical)

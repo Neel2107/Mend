@@ -33,6 +33,11 @@ final class AppCoordinator: NSObject {
             }
         }
 
+        if CommandLine.arguments.contains("--preview-overlay") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.showTestPill()
+            }
+        }
     }
 
     private func configureMenuBar() {
@@ -44,7 +49,7 @@ final class AppCoordinator: NSObject {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Enable Accessibility…", action: #selector(requestAccessibility), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Show test pill", action: #selector(showTestPill), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Preview overlay states", action: #selector(showTestPill), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Mend", action: #selector(quit), keyEquivalent: "q"))
 
@@ -138,7 +143,13 @@ final class AppCoordinator: NSObject {
     }
 
     @objc private func showTestPill() {
-        overlay.show(.working("Fixing grammar…"), autoHideAfter: 2)
+        Task { @MainActor in
+            overlay.show(.working("Fixing grammar…"))
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            overlay.show(.success("Fixed"))
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            overlay.show(.failure("Couldn’t replace text"), autoHideAfter: 1.8)
+        }
     }
 
     @objc private func quit() {

@@ -12,7 +12,7 @@ Mend is a small macOS menu-bar app that fixes selected text without making you l
 3. Mend sends the selection through your saved instruction.
 4. The corrected text replaces the selection in place.
 
-A non-activating status pill appears at the bottom of the current screen while Mend works. Press the shortcut again to cancel an in-flight request.
+A compact, non-activating status pill appears at the bottom-right of the current screen while Mend works. Press the shortcut again to cancel an in-flight request.
 
 ## Requirements
 
@@ -52,6 +52,18 @@ Release builds use a stable designated code-signing requirement so macOS can pre
 - In-place replacement with clipboard restoration
 
 The v0 uses plain text. Rich-text formatting and configurable shortcuts are intentionally deferred.
+
+## Experiment with the overlay UI
+
+All visual values are grouped in `OverlayDesign` at the top of `Sources/Mend/OverlayController.swift`. Change the panel size, screen margins, spacing, typography, or border opacity there, then rebuild and preview:
+
+```sh
+./Scripts/run.sh --preview-overlay
+```
+
+Open the Mend menu-bar icon and choose **Preview overlay states** to cycle through working, success, and error appearances without making an API request.
+
+See [`docs/UI_EXPERIMENTS.md`](docs/UI_EXPERIMENTS.md) for suggested directions and the exact files involved.
 
 ## License
 
