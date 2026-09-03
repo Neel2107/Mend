@@ -29,7 +29,7 @@ enum LLMProvider: String, CaseIterable, Identifiable {
     var defaultModel: String? {
         switch self {
         case .openAI: return "gpt-4.1-mini"
-        case .gemini: return "gemini-2.5-flash"
+        case .gemini: return "gemini-3.5-flash-lite"
         case .custom: return nil
         }
     }
@@ -81,7 +81,12 @@ final class AppSettings: ObservableObject {
 
         provider = savedProvider
         endpoint = savedEndpoint ?? savedProvider.defaultEndpoint ?? ""
-        model = defaults.string(forKey: Key.model) ?? savedProvider.defaultModel ?? ""
+        let savedModel = defaults.string(forKey: Key.model)
+        if savedProvider == .gemini && savedModel == "gemini-2.5-flash" {
+            model = savedProvider.defaultModel ?? ""
+        } else {
+            model = savedModel ?? savedProvider.defaultModel ?? ""
+        }
         prompt = defaults.string(forKey: Key.prompt) ?? Self.defaultPrompt
         apiKey = savedAPIKey
         if let data = defaults.data(forKey: Key.shortcut),
