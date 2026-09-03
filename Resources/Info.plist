@@ -9,7 +9,7 @@
     <key>CFBundleDisplayName</key>
     <string>Mend</string>
     <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+    <string>MendIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.mend.desktop</string>
     <key>CFBundleInfoDictionaryVersion</key>
