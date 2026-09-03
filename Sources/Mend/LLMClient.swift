@@ -21,6 +21,24 @@ struct LLMClient {
     /// parameter, and those requests are retried without it.
     static let temperature: Double = 0
 
+    /// Opens a connection to the provider ahead of the request, so DNS, TCP,
+    /// and TLS happen while the selection is still being read. The response
+    /// is ignored; only the pooled connection matters. Returns how long the
+    /// warm-up took, or nil if it failed or was cancelled.
+    func preconnect() -> Task<Duration?, Never> {
+        Task.detached(priority: .userInitiated) { [session, configuration] in
+            guard let endpoint = URL(string: configuration.endpoint),
+                  let origin = URL(string: "/", relativeTo: endpoint) else { return nil }
+            var request = URLRequest(url: origin)
+            request.httpMethod = "HEAD"
+            request.timeoutInterval = 10
+            let clock = ContinuousClock()
+            let start = clock.now
+            guard (try? await session.data(for: request)) != nil else { return nil }
+            return start.duration(to: clock.now)
+        }
+    }
+
     func rewrite(_ text: String) async throws -> String {
         guard let url = URL(string: configuration.endpoint),
               let scheme = url.scheme?.lowercased(),

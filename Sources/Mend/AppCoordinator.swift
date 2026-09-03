@@ -210,8 +210,16 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         activeTask = Task { [weak self] in
             guard let self else { return }
 
+            let timeline = RewriteTimeline()
+            // Warm the connection while the selection is being read.
+            let warmup = LLMClient(configuration: providerConfigurations[0].llm).preconnect()
+            defer {
+                warmup.cancel()
+            }
+
             do {
                 let selection = try await selectionService.captureSelection()
+                timeline.mark("capture")
                 try Task.checkCancellation()
 
                 overlay.show(.working(action.workingLabel))
@@ -220,39 +228,54 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
                     selection.text,
                     using: providerConfigurations,
                     for: action,
-                    via: shortcut
+                    via: shortcut,
+                    timeline: timeline
                 )
                 try Task.checkCancellation()
 
                 guard result.trimmingCharacters(in: .whitespacesAndNewlines)
                     != selection.text.trimmingCharacters(in: .whitespacesAndNewlines) else {
                     overlay.show(.message("No changes suggested", symbol: "equal.circle.fill"), autoHideAfter: 2)
-                    activeTask = nil
+                    await finish(timeline, warmup: warmup, outcome: "no changes")
                     return
                 }
 
                 let replacement = try await selectionService.replaceSelection(result, in: selection)
+                timeline.mark("replace")
                 switch replacement {
-                case .verified:
+                case .verified(let method):
                     overlay.show(.success("Fixed"), autoHideAfter: 1.2)
+                    await finish(timeline, warmup: warmup, outcome: "fixed via \(method.rawValue)")
                 case .unverified:
                     overlay.show(.message("Pasted — check the result", symbol: "doc.on.clipboard.fill"), autoHideAfter: 2.5)
+                    await finish(timeline, warmup: warmup, outcome: "pasted unverified")
                 }
             } catch is CancellationError {
                 overlay.show(.message("Cancelled", symbol: "xmark.circle.fill"), autoHideAfter: 1.2)
+                await finish(timeline, warmup: warmup, outcome: "cancelled")
             } catch {
                 overlay.show(.failure(error.localizedDescription), autoHideAfter: 5)
+                await finish(timeline, warmup: warmup, outcome: "failed: \(error.localizedDescription)")
             }
-
-            activeTask = nil
         }
+    }
+
+    /// Writes the timeline once the warm-up has settled, then releases the task slot.
+    private func finish(_ timeline: RewriteTimeline, warmup: Task<Duration?, Never>, outcome: String) async {
+        activeTask = nil
+        warmup.cancel()
+        if let duration = await warmup.value {
+            timeline.record("preconnect", duration)
+        }
+        timeline.log(outcome: outcome)
     }
 
     private func rewrite(
         _ text: String,
         using configurations: [ProviderConfiguration],
         for action: RewriteAction,
-        via shortcut: GlobalShortcut
+        via shortcut: GlobalShortcut,
+        timeline: RewriteTimeline
     ) async throws -> String {
         var attemptedProviders: [LLMProvider] = []
         var lastError: (any Error)?
@@ -270,6 +293,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             defer { narrator.cancel() }
 
             attemptedProviders.append(configuration.provider)
+            defer { timeline.mark(configuration.provider.displayName) }
             do {
                 let result = try await LLMClient(configuration: configuration.llm).rewrite(text)
                 guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

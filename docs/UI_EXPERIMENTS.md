@@ -55,3 +55,11 @@ For bottom-center, use `container.midX - width / 2` for `x`. For bottom-left, us
 Failure states may grow to `OverlayDesign.maximumFailurePanelWidth` so error messages stay readable; other states cap at `maximumPanelWidth`.
 
 Mend intentionally avoids entrance animation because the overlay may appear hundreds of times per day. Immediate feedback feels faster for a keyboard-driven action.
+
+## Timing
+
+Every rewrite writes a one-line breakdown to the unified log: capture, each provider attempt, replace, the connection warm-up that ran alongside capture, and the total. No selected text is logged. Watch it with:
+
+```sh
+log stream --predicate 'subsystem == "com.mend.desktop" AND category == "timing"' --level info
+```

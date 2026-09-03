@@ -64,4 +64,14 @@ struct OverlayPlacementTests {
 
         #expect(frame == NSRect(x: 100, y: 250, width: 800, height: 600))
     }
+
+    @Test("Timelines print each step and the total in milliseconds")
+    func testTimelineFormatting() {
+        let summary = RewriteTimeline.format(
+            [("capture", .milliseconds(12)), ("OpenAI", .milliseconds(840)), ("replace", .microseconds(5400))],
+            total: .milliseconds(858)
+        )
+
+        #expect(summary == "capture 12 ms, OpenAI 840 ms, replace 5 ms, total 858 ms")
+    }
 }

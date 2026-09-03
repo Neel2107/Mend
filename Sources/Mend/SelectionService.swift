@@ -9,8 +9,13 @@ struct CapturedSelection {
     let clipboardSnapshot: ClipboardSnapshot
 }
 
+enum ReplacementMethod: String {
+    case accessibility
+    case paste
+}
+
 enum ReplacementResult: Equatable {
-    case verified
+    case verified(ReplacementMethod)
     case unverified
 }
 
@@ -287,7 +292,7 @@ final class SelectionService {
            accessibility.setSelectedText(text, of: currentElement),
            let valueAfter = accessibility.value(of: currentElement),
            valueAfter != valueBefore {
-            return .verified
+            return .verified(.accessibility)
         }
 
         guard pasteboard.setString(text) else {
@@ -311,10 +316,10 @@ final class SelectionService {
             let selectedAfter = element.flatMap(accessibility.selectedText(of:))
 
             if let valueBefore, let valueAfter, valueBefore != valueAfter {
-                return .verified
+                return .verified(.paste)
             }
             if let selectedBefore, let selectedAfter, selectedBefore != selectedAfter {
-                return .verified
+                return .verified(.paste)
             }
         }
 

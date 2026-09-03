@@ -100,6 +100,31 @@ struct LLMClientTests {
         #expect(jsonObject(StubURLProtocol.requests[1].body)["temperature"] == nil)
     }
 
+    @Test("Pre-connecting sends a HEAD to the endpoint's origin and reports its duration")
+    func testPreconnect() async throws {
+        let client = client(configuration)
+        StubURLProtocol.handler = { request, _ in
+            (.stub(request, status: 404), Data())
+        }
+
+        let duration = await client.preconnect().value
+
+        #expect(duration != nil)
+        let sent = try #require(StubURLProtocol.requests.first)
+        #expect(sent.request.httpMethod == "HEAD")
+        #expect(sent.request.url?.absoluteString == "https://example.test/")
+    }
+
+    @Test("A failed pre-connect reports nothing and throws nothing")
+    func testPreconnectFailure() async {
+        let client = client(configuration)
+        StubURLProtocol.handler = { _, _ in throw URLError(.cannotConnectToHost) }
+
+        let duration = await client.preconnect().value
+
+        #expect(duration == nil)
+    }
+
     @Test("An unreadable reply is reported as invalid")
     func testInvalidResponse() async {
         let client = client(configuration)

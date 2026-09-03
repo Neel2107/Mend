@@ -158,7 +158,7 @@ struct SelectionReplacementTests {
 
         let result = try await service.replaceSelection("sent", in: harness.selection("have send"))
 
-        #expect(result == .verified)
+        #expect(result == .verified(.accessibility))
         #expect(harness.accessibility.value == "I sent it.")
         #expect(harness.keyboard.keys.isEmpty)
         #expect(harness.pasteboard.contents == "old clipboard")
@@ -186,7 +186,7 @@ struct SelectionReplacementTests {
 
         let result = try await service.replaceSelection("sent", in: harness.selection("have send"))
 
-        #expect(result == .verified)
+        #expect(result == .verified(.paste))
         #expect(harness.keyboard.keys == [UInt16(kVK_ANSI_V)])
         #expect(clipboardDuringPaste == "sent")
         #expect(harness.accessibility.value == "I sent it.")
