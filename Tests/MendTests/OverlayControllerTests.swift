@@ -6,7 +6,7 @@ import Testing
 @Suite("Overlay presentation")
 struct OverlayControllerTests {
     @Test("A hidden overlay reveals only its requested state")
-    func testHiddenOverlayRevealsOnlyItsRequestedState() {
+    func testHiddenOverlayRevealsOnlyItsRequestedState() async {
         let transitions: [(previous: OverlayState, requested: OverlayState)] = [
             (.success("Fixed"), .working("Fixing grammar…")),
             (.failure("Previous error"), .working("Fixing grammar…")),
@@ -25,6 +25,22 @@ struct OverlayControllerTests {
                 panel.events == [
                     .setFrame(animated: false),
                     .setContentVisible(false),
+                    .rebuild,
+                    .prepare,
+                    .show,
+                ]
+            )
+            #expect(panel.stateWhenRebuilt == transition.requested)
+            #expect(panel.stateWhenRevealed == nil)
+
+            await controller.waitForPendingPresentation()
+
+            #expect(
+                panel.events == [
+                    .setFrame(animated: false),
+                    .setContentVisible(false),
+                    .rebuild,
+                    .prepare,
                     .show,
                     .prepare,
                     .setContentVisible(true),
@@ -46,6 +62,35 @@ struct OverlayControllerTests {
         #expect(panel.events == [.setFrame(animated: true), .show])
         #expect(panel.stateWhenShown == .success("Fixed"))
     }
+
+    @Test("A new request dismisses its visible result before showing an error")
+    func testPreviousResultIsDismissedBeforeNoSelectionError() async {
+        let model = OverlayModel()
+        let panel = RecordingOverlayPanel(state: { model.state })
+        let controller = OverlayController(model: model, panel: panel)
+
+        controller.show(.success("Fixed"))
+        await controller.waitForPendingPresentation()
+        controller.dismiss()
+
+        #expect(panel.isVisible == false)
+        #expect(panel.events.last == .hide)
+        #expect(panel.isContentVisible == false)
+
+        controller.show(.failure("Select some text first"))
+        #expect(panel.stateWhenRevealed == .success("Fixed"))
+
+        await controller.waitForPendingPresentation()
+
+        #expect(panel.isVisible)
+        #expect(
+            panel.statesWhenRevealed == [
+                .success("Fixed"),
+                .failure("Select some text first"),
+            ]
+        )
+        #expect(panel.stateWhenRevealed == .failure("Select some text first"))
+    }
 }
 
 @MainActor
@@ -53,15 +98,19 @@ private final class RecordingOverlayPanel: OverlayPanelPresenting {
     enum Event: Equatable {
         case setFrame(animated: Bool)
         case setContentVisible(Bool)
+        case rebuild
         case prepare
         case show
         case hide
     }
 
     var isVisible = false
+    private(set) var isContentVisible = false
     private(set) var events: [Event] = []
     private(set) var stateWhenShown: OverlayState?
     private(set) var stateWhenRevealed: OverlayState?
+    private(set) var stateWhenRebuilt: OverlayState?
+    private(set) var statesWhenRevealed: [OverlayState] = []
     private let state: () -> OverlayState
 
     init(state: @escaping () -> OverlayState) {
@@ -73,10 +122,17 @@ private final class RecordingOverlayPanel: OverlayPanelPresenting {
     }
 
     func setOverlayContentVisible(_ isVisible: Bool) {
+        isContentVisible = isVisible
         if isVisible {
             stateWhenRevealed = state()
+            statesWhenRevealed.append(state())
         }
         events.append(.setContentVisible(isVisible))
+    }
+
+    func rebuildOverlayContent(using model: OverlayModel) {
+        stateWhenRebuilt = state()
+        events.append(.rebuild)
     }
 
     func prepareForPresentation() {

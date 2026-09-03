@@ -16,6 +16,7 @@ enum OverlayDesign {
     static let resizeDuration: TimeInterval = 0.42
     static let contentTransitionDuration: TimeInterval = 0.24
     static let transitionBlurRadius: CGFloat = 5
+    static let presentationDelayNanoseconds: UInt64 = 16_000_000
 }
 
 enum OverlayState: Equatable {
@@ -42,6 +43,7 @@ protocol OverlayPanelPresenting: AnyObject {
     var isVisible: Bool { get }
     func setOverlayFrame(_ frame: NSRect, animated: Bool)
     func setOverlayContentVisible(_ isVisible: Bool)
+    func rebuildOverlayContent(using model: OverlayModel)
     func prepareForPresentation()
     func showOverlay()
     func hideOverlay()
@@ -75,6 +77,10 @@ extension NonActivatingPanel: OverlayPanelPresenting {
         alphaValue = isVisible ? 1 : 0
     }
 
+    func rebuildOverlayContent(using model: OverlayModel) {
+        contentView = NSHostingView(rootView: OverlayView(model: model))
+    }
+
     func showOverlay() {
         orderFrontRegardless()
     }
@@ -89,6 +95,8 @@ final class OverlayController {
     private let model: OverlayModel
     private let panel: any OverlayPanelPresenting
     private var hideTask: Task<Void, Never>?
+    private var presentationTask: Task<Void, Never>?
+    private var isPresentationPending = false
 
     init() {
         let model = OverlayModel()
@@ -117,7 +125,9 @@ final class OverlayController {
 
     func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
         hideTask?.cancel()
-        let shouldAnimate = panel.isVisible
+        presentationTask?.cancel()
+        let shouldAnimate = panel.isVisible && !isPresentationPending
+        isPresentationPending = false
 
         if shouldAnimate {
             withAnimation(.easeInOut(duration: OverlayDesign.contentTransitionDuration)) {
@@ -129,12 +139,23 @@ final class OverlayController {
 
         resizeAndPositionPanel(for: state, animated: shouldAnimate)
         if !shouldAnimate {
-            // Reveal the window only after its new SwiftUI content has been drawn.
-            // A hidden window can retain its previous backing frame even after layout.
+            // Hidden NSWindows can retain their last backing frame. Keep that frame
+            // transparent, replace the SwiftUI tree, and reveal on the next frame.
             panel.setOverlayContentVisible(false)
-            panel.showOverlay()
+            panel.rebuildOverlayContent(using: model)
             panel.prepareForPresentation()
-            panel.setOverlayContentVisible(true)
+            panel.showOverlay()
+            isPresentationPending = true
+            presentationTask = Task { [weak self] in
+                try? await Task.sleep(
+                    nanoseconds: OverlayDesign.presentationDelayNanoseconds
+                )
+                guard !Task.isCancelled, let self else { return }
+                self.panel.prepareForPresentation()
+                self.panel.setOverlayContentVisible(true)
+                self.isPresentationPending = false
+                self.presentationTask = nil
+            }
         } else {
             panel.showOverlay()
         }
@@ -144,10 +165,28 @@ final class OverlayController {
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self?.panel.hideOverlay()
+                    self?.hideOverlay()
                 }
             }
         }
+    }
+
+    func dismiss() {
+        hideTask?.cancel()
+        hideTask = nil
+        hideOverlay()
+    }
+
+    func waitForPendingPresentation() async {
+        await presentationTask?.value
+    }
+
+    private func hideOverlay() {
+        presentationTask?.cancel()
+        presentationTask = nil
+        isPresentationPending = false
+        panel.setOverlayContentVisible(false)
+        panel.hideOverlay()
     }
 
     private func resizeAndPositionPanel(for state: OverlayState, animated: Bool) {

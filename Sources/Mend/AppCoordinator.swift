@@ -108,6 +108,10 @@ final class AppCoordinator: NSObject {
             return
         }
 
+        // A previous result may still be visible while the next selection is
+        // validated. Remove it immediately; the next UI appears after validation.
+        overlay.dismiss()
+
         guard AXIsProcessTrusted() else {
             requestAccessibility()
             overlay.show(.failure("Allow Accessibility, then try again"), autoHideAfter: 4)
