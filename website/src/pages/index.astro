@@ -6,23 +6,31 @@ import "../styles/global.css";
 const github = "https://github.com/Neel2107/Mend";
 const releases = `${github}/releases/latest`;
 const installCommand = "curl -fsSL https://mend.itsneel.com/install | sh";
+const defaultPrompt =
+  "Correct grammar, spelling, punctuation, and awkward phrasing. Preserve the writer's meaning, tone, formatting, and level of formality. Make the smallest changes needed. Return only the corrected text.";
+
+
+const terminalLines = [
+  { prompt: true, text: installCommand },
+  { text: "Downloading Mend-app-aarch64-apple-darwin.tar.gz" },
+  { text: "Verified SHA-256: 3f9c1d…a41e" },
+  { text: "Installed Mend at /Applications/Mend.app" },
+  { text: 'Launch it with: open "/Applications/Mend.app"' },
+];
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#eceef3" />
     <meta
       name="description"
-      content="Mend corrects selected text anywhere on macOS with one shortcut. Open source, private, and built for Apple silicon."
+      content="Mend fixes selected text in any macOS app with one shortcut. Open source, keys stay in Keychain, built for Apple silicon."
     />
     <meta property="og:title" content="Mend — write first, mend the rest" />
-    <meta
-      property="og:description"
-      content="Correct selected text anywhere on macOS with one shortcut."
-    />
+    <meta property="og:description" content="Fix selected text anywhere on macOS with one shortcut." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://mend.itsneel.com" />
     <meta property="og:image" content={new URL(appIcon, Astro.site)} />
@@ -30,247 +38,648 @@ const installCommand = "curl -fsSL https://mend.itsneel.com/install | sh";
     <title>Mend — write first, mend the rest</title>
   </head>
   <body>
-    <div class="ambient ambient-one" aria-hidden="true"></div>
-    <div class="ambient ambient-two" aria-hidden="true"></div>
+    <a class="skip" href="#story">Skip to content</a>
 
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="Mend home">
-        <img src={appIcon} alt="" width="34" height="34" />
-        <span>Mend</span>
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="#how-it-works">How it works</a>
-        <a href="#privacy">Privacy</a>
-        <a class="github-link" href={github} target="_blank" rel="noreferrer">
-          GitHub
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M5.25 10.75 10.75 5.25M6.25 5.25h4.5v4.5"></path>
-          </svg>
+    <header class="menubar">
+      <div class="menubar-inner">
+        <a class="menubar-app" href="#top" aria-label="Mend home">
+          <img src={appIcon} alt="" width="20" height="20" />
+          <strong>Mend</strong>
         </a>
-      </nav>
+        <nav aria-label="Primary">
+          <a href="#how">How it works</a>
+          <a href="#try">Try it</a>
+          <a href="#settings">Settings</a>
+          <a href="#install">Install</a>
+          <a href={github} target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+        <div class="menubar-status" aria-hidden="true">
+          <span class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>G</kbd></span>
+          <img class="status-mark" src={menuMark} alt="" width="18" height="18" />
+          <span class="clock" data-clock></span>
+        </div>
+      </div>
     </header>
 
     <main id="top">
-      <section class="hero">
-        <div class="hero-copy">
-          <div class="eyebrow reveal reveal-one">
-            <span class="status-dot"></span>
-            Native macOS writing assistant
-          </div>
-          <h1 class="reveal reveal-two">Write first.<br /><em>Mend</em> the rest.</h1>
-          <p class="hero-description reveal reveal-three">
-            Select text in any app, press one shortcut, and get a cleaner version
-            exactly where you wrote it.
-          </p>
-          <div class="hero-actions reveal reveal-four">
-            <a class="button button-primary" href={releases} target="_blank" rel="noreferrer">
-              Download for Mac
-              <svg viewBox="0 0 18 18" aria-hidden="true">
-                <path d="M9 2.75v8.5M5.75 8.25 9 11.5l3.25-3.25M3 14.25h12"></path>
-              </svg>
-            </a>
-            <a class="button button-secondary" href={github} target="_blank" rel="noreferrer">
-              View source
-            </a>
-          </div>
-          <p class="requirements reveal reveal-five">Apple silicon · macOS 13+ · MIT licensed</p>
-        </div>
+      <div class="split">
+        <aside class="screen-col" aria-label="Mend on a Mac screen">
+          <div class="screen" data-screen data-win="notes" data-scene="draft">
+            <div class="stage" data-stage>
+              <!-- Notes: the draft that gets mended -->
+              <div class="win win-notes">
+                <div class="titlebar">
+                  <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span class="title" data-notes-title>Friday update — Notes</span>
+                </div>
+                <div class="notes-body" data-doc>
+                  <p class="notes-heading">Friday update</p>
+                  <p>
+                    Hey Sam, quick note before the weekend. I
+                    <span class="fix" data-fixed="sent">have send</span> the revised
+                    proposal this morning and the early numbers
+                    <span class="fix" data-fixed="look">looks</span> good.
+                    <span class="fix" data-fixed="There">Their</span> is still one
+                    rough edge in Settings, which I will fix before Monday.
+                  </p>
+                  <p class="notes-sign">— Jordan</p>
+                </div>
+              </div>
 
-        <div class="demo-shell reveal reveal-demo" data-demo>
-          <div class="demo-topbar">
-            <div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div>
-            <span>Draft</span>
-            <div class="menu-mark">
-              <img src={menuMark} alt="" />
+              <!-- Settings: a faithful copy of the real window -->
+              <div class="win win-settings" aria-hidden="true">
+                <div class="titlebar">
+                  <span class="lights"><i></i><i></i><i></i></span>
+                  <span class="title">Mend Settings</span>
+                </div>
+                <div class="form">
+                  <div class="group" data-group="model">
+                    <div class="row">
+                      <span>Provider</span>
+                      <span class="segmented"><b class="is-on">OpenAI</b><b>Gemini</b><b>Custom</b></span>
+                    </div>
+                    <div class="row row-fields">
+                      <span class="field">https://api.openai.com/v1/chat/completions</span>
+                      <span class="field">gpt-4.1-mini</span>
+                    </div>
+                  </div>
+                  <div class="group" data-group="key">
+                    <div class="row">
+                      <span class="field field-secret">••••••••••••••••••••••••</span>
+                      <span class="mini-button">Paste</span>
+                    </div>
+                    <p class="group-note">Your key is stored in macOS Keychain.</p>
+                  </div>
+                  <div class="group" data-group="instruction">
+                    <p class="group-title">Instruction</p>
+                    <div class="field field-area">{defaultPrompt}</div>
+                  </div>
+                  <div class="group group-controls">
+                    <div class="row">
+                      <span>Rewrite selected text</span>
+                      <span class="recorder">⌃ ⌥ G</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="form-footer">
+                  <span class="mini-button">Restore Prompt</span>
+                  <span class="mini-button mini-button-primary">Save</span>
+                </div>
+              </div>
+
+              <!-- Terminal: the installer -->
+              <div class="win win-terminal" aria-hidden="true">
+                <div class="titlebar">
+                  <span class="lights"><i></i><i></i><i></i></span>
+                  <span class="title">Terminal</span>
+                </div>
+                <div class="terminal-lines">
+                  {terminalLines.map((line) => (
+                    <p class="tline" data-tline>
+                      {line.prompt && <span class="prompt">$ </span>}{line.text}
+                    </p>
+                  ))}
+                </div>
+              </div>
+
+              <div class="pill" data-pill data-state="hidden" aria-live="polite" aria-atomic="true">
+                <span class="pill-icon" data-pill-icon></span>
+                <span class="pill-label" data-pill-label></span>
+                <span class="pill-measure" data-pill-measure aria-hidden="true"></span>
+              </div>
             </div>
           </div>
-          <div class="editor" aria-label="Animated example of Mend correcting text">
-            <p class="editor-label">PROJECT UPDATE</p>
-            <p class="editor-text" aria-live="polite" data-demo-text>
-              I has sent the revised proposal to the team this morning.
+        </aside>
+
+        <div class="story" id="story">
+          <section class="chapter hero" data-scene="draft">
+            <h1 data-hero-title>Write first, mend <span class="fix" data-fixed="the">teh</span> rest.</h1>
+            <p class="lede">Select text in any app, press one shortcut, and it is fixed in place.</p>
+            <div class="actions">
+              <a class="button button-primary" href={releases} target="_blank" rel="noreferrer">Download for Mac</a>
+              <button class="install-inline" type="button" data-copy={installCommand}>
+                <span class="prompt">$</span>
+                <code>{installCommand}</code>
+                <span class="copy-label" data-copy-label>Copy</span>
+              </button>
+            </div>
+            <p class="fineprint">Apple silicon · macOS 13+ · MIT · open source</p>
+          </section>
+
+          <section class="chapter how" id="how">
+            <h2>One shortcut, every app.</h2>
+            <div class="step" data-scene="select">
+              <span class="chip">Select</span>
+              <p>Highlight text in any app.</p>
+            </div>
+            <div class="step" data-scene="working">
+              <span class="chip">⌃⌥G</span>
+              <p>Press the shortcut. Press again to cancel.</p>
+            </div>
+            <div class="step" data-scene="fixed">
+              <span class="chip chip-done">✓</span>
+              <p>The fix lands in place. The capsule says so, then leaves.</p>
+            </div>
+          </section>
+
+          <section class="chapter try" id="try" data-scene="try">
+            <h2>Now you.</h2>
+            <p class="body">
+              Select a sentence in the draft and press <kbd>⌃</kbd><kbd>⌥</kbd><kbd>G</kbd>.
             </p>
-            <div class="selection" aria-hidden="true" data-selection></div>
-            <span class="caret" aria-hidden="true"></span>
-          </div>
-          <div class="mend-pill" data-pill aria-hidden="true">
-            <span class="pill-icon" data-pill-icon>
-              <i></i><i></i><i></i>
-            </span>
-            <span data-pill-label>Fixing grammar…</span>
-          </div>
-          <p class="demo-caption"><span>⌥ /</span> wherever you write</p>
-        </div>
-      </section>
-
-      <section class="principle" aria-label="Product principle">
-        <p>Keep the meaning.</p>
-        <p>Lose the friction.</p>
-      </section>
-
-      <section class="how" id="how-it-works">
-        <div class="section-heading">
-          <p class="section-kicker">Three small steps</p>
-          <h2>It stays out of your way.</h2>
-        </div>
-        <ol class="steps">
-          <li>
-            <span class="step-number">01</span>
-            <div>
-              <h3>Select</h3>
-              <p>Highlight a sentence in Mail, Slack, Notes, your browser, or anywhere else.</p>
+            <div class="try-actions">
+              <button class="button button-secondary" type="button" data-try-next>Mend the next sentence</button>
+              <span class="try-status" data-try-status></span>
             </div>
-          </li>
-          <li>
-            <span class="step-number">02</span>
-            <div>
-              <h3>Shortcut</h3>
-              <p>Press your chosen global shortcut. Mend works quietly in the background.</p>
-            </div>
-          </li>
-          <li>
-            <span class="step-number">03</span>
-            <div>
-              <h3>Continue</h3>
-              <p>Your selection is replaced in place. No tabs, copying, or broken concentration.</p>
-            </div>
-          </li>
-        </ol>
-      </section>
+          </section>
 
-      <section class="feature-grid">
-        <article class="feature feature-wide">
-          <div>
-            <p class="section-kicker">Your instruction</p>
-            <h2>Grammar is only the beginning.</h2>
-            <p>
-              Save any editing prompt: tighten a paragraph, simplify technical language,
-              change the tone, or translate a message.
+          <section class="chapter settings" id="settings">
+            <h2>Yours to change.</h2>
+            <div class="block" data-scene="instruction">
+              <h3>Your instruction</h3>
+              <p>One plain sentence. Edit it to tighten, translate, or soften.</p>
+            </div>
+            <div class="block" data-scene="model">
+              <h3>Your model</h3>
+              <p>OpenAI, Gemini, or any compatible endpoint. Extra keys act as fallbacks.</p>
+            </div>
+            <div class="block" id="privacy" data-scene="key">
+              <h3>Your key</h3>
+              <p>Stored in macOS Keychain. No server, no account, no analytics.</p>
+            </div>
+          </section>
+
+          <section class="chapter install" id="install" data-scene="install">
+            <h2>One line.</h2>
+            <p class="body">Then allow Accessibility on first use.</p>
+            <div class="command">
+              <span class="prompt">$</span>
+              <code>{installCommand}</code>
+              <button class="button button-primary" type="button" data-copy={installCommand}>
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <p class="install-alt">
+              <a href={releases} target="_blank" rel="noreferrer">Or download the DMG</a>
             </p>
-          </div>
-          <div class="prompt-card">
-            <span>Instruction</span>
-            <p>Correct grammar and awkward phrasing. Preserve my meaning and tone. Return only the corrected text.</p>
-            <div class="prompt-footer"><i></i> Saved locally</div>
-          </div>
-        </article>
-
-        <article class="feature provider-card">
-          <p class="section-kicker">Bring your model</p>
-          <h3>OpenAI, Gemini, or your own endpoint.</h3>
-          <div class="provider-list" aria-label="Supported providers">
-            <span>OpenAI</span><i></i><span>Gemini</span><i></i><span>Custom</span>
-          </div>
-        </article>
-
-        <article class="feature privacy-card" id="privacy">
-          <p class="section-kicker">Private by design</p>
-          <h3>Your key stays in macOS Keychain.</h3>
-          <p>No accounts, analytics, or hosted Mend backend.</p>
-          <svg class="keyhole" viewBox="0 0 80 80" aria-hidden="true">
-            <circle cx="40" cy="34" r="13"></circle>
-            <path d="M35 44 31 65h18l-4-21"></path>
-          </svg>
-        </article>
-      </section>
-
-      <section class="install-section">
-        <div>
-          <p class="section-kicker">One-line install</p>
-          <h2>Ready in under a minute.</h2>
+          </section>
         </div>
-        <div class="terminal-line">
-          <span class="terminal-prompt">$</span>
-          <code>{installCommand}</code>
-          <button type="button" data-copy={installCommand} aria-label="Copy install command">
-            <svg viewBox="0 0 20 20" aria-hidden="true">
-              <rect x="6.5" y="6.5" width="9" height="10" rx="2"></rect>
-              <path d="M13.5 6.5v-1A2 2 0 0 0 11.5 3.5h-7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
-            </svg>
-            <span>Copy</span>
-          </button>
-        </div>
-      </section>
-
-      <section class="final-cta">
-        <img src={appIcon} alt="Mend" width="88" height="88" />
-        <h2>Stay in the sentence.</h2>
-        <p>Mend handles the detour.</p>
-        <a class="button button-primary" href={releases} target="_blank" rel="noreferrer">Download Mend</a>
-      </section>
+      </div>
     </main>
 
     <footer>
-      <a class="brand footer-brand" href="#top">
-        <img src={appIcon} alt="" width="28" height="28" />
-        <span>Mend</span>
-      </a>
-      <p>Open source and built for macOS.</p>
-      <div>
-        <a href={github} target="_blank" rel="noreferrer">GitHub</a>
-        <a href={`${github}/blob/main/LICENSE`} target="_blank" rel="noreferrer">MIT License</a>
+      <div class="footer-inner">
+        <a class="menubar-app" href="#top"><img src={appIcon} alt="" width="20" height="20" /><strong>Mend</strong></a>
+        <nav aria-label="Footer">
+          <a href={github} target="_blank" rel="noreferrer">GitHub</a>
+          <a href={`${github}/blob/main/LICENSE`} target="_blank" rel="noreferrer">MIT License</a>
+          <a href={`${github}/blob/main/docs/INSTALL.md`} target="_blank" rel="noreferrer">Install guide</a>
+        </nav>
       </div>
     </footer>
 
     <script>
-      const root = document.querySelector<HTMLElement>("[data-demo]");
-      const text = root?.querySelector<HTMLElement>("[data-demo-text]");
-      const pill = root?.querySelector<HTMLElement>("[data-pill]");
-      const label = root?.querySelector<HTMLElement>("[data-pill-label]");
-      const copyButton = document.querySelector<HTMLButtonElement>("[data-copy]");
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-      const wait = (milliseconds: number) =>
-        new Promise((resolve) => setTimeout(resolve, milliseconds));
+      // ---------- Stage: a fixed-size canvas scaled to fit the screen panel ----------
+      const screen = document.querySelector<HTMLElement>("[data-screen]")!;
+      const stage = document.querySelector<HTMLElement>("[data-stage]")!;
 
-      async function runDemo() {
-        if (!root || !text || !pill || !label) return;
-        while (true) {
-          text.textContent = "I has sent the revised proposal to the team this morning.";
-          root.dataset.state = "selecting";
-          await wait(1100);
-          root.dataset.state = "fixing";
-          label.textContent = "Fixing grammar…";
-          await wait(1700);
-          text.textContent = "I sent the revised proposal to the team this morning.";
-          root.dataset.state = "fixed";
-          label.textContent = "Fixed";
-          await wait(1900);
-          root.dataset.state = "resetting";
-          await wait(700);
+      function fitStage() {
+        const styles = getComputedStyle(screen);
+        const stageWidth = parseFloat(styles.getPropertyValue("--stage-w"));
+        const stageHeight = parseFloat(styles.getPropertyValue("--stage-h"));
+        const scale = screen.clientWidth / stageWidth;
+        const height = Math.round(stageHeight * scale);
+        stage.style.transform = `scale(${scale})`;
+        screen.style.height = `${height}px`;
+        // Keep the screen vertically centred in the viewport while it is stuck.
+        const column = screen.parentElement as HTMLElement;
+        const isSplit = window.matchMedia("(min-width: 901px)").matches;
+        column.style.top = isSplit ? `${Math.max(72, Math.round((window.innerHeight - height) / 2))}px` : "";
+      }
+      window.addEventListener("resize", fitStage);
+      fitStage();
+      new ResizeObserver(fitStage).observe(screen);
+
+      // ---------- Orb: a port of SearchingOrb.swift ----------
+      function drawOrb(context: CanvasRenderingContext2D, size: number, time: number) {
+        const center = size / 2;
+        const radius = size * 0.43;
+        const spin = time * 0.72;
+        const scan = time * 3.1;
+        const tilt = 0.34;
+        const dots: { x: number; y: number; depth: number; r: number; a: number }[] = [];
+        for (let li = -2; li <= 2; li += 1) {
+          const lat = li * 0.48;
+          const count = li === 0 ? 12 : Math.abs(li) === 1 ? 10 : 7;
+          for (let i = 0; i < count; i += 1) {
+            const lon = (i / count) * Math.PI * 2;
+            const cl = Math.cos(lat);
+            const x = cl * Math.cos(lon);
+            const y = Math.sin(lat);
+            const z = cl * Math.sin(lon);
+            const rx = x * Math.cos(spin) - z * Math.sin(spin);
+            const rz = x * Math.sin(spin) + z * Math.cos(spin);
+            const py = y * Math.cos(tilt) - rz * Math.sin(tilt);
+            const dz = y * Math.sin(tilt) + rz * Math.cos(tilt);
+            const depth = (dz + 1) / 2;
+            const d = lon + spin - scan;
+            const wrapped = Math.atan2(Math.sin(d), Math.cos(d));
+            const strength = Math.exp(-(wrapped * wrapped) / 0.11) * Math.max(0, dz);
+            dots.push({
+              x: center + rx * radius,
+              y: center - py * radius,
+              depth: dz,
+              r: 0.34 + 0.42 * depth + 0.48 * strength,
+              a: 0.16 + 0.34 * depth + 0.46 * strength,
+            });
+          }
+        }
+        context.clearRect(0, 0, size, size);
+        for (const dot of dots.sort((a, b) => a.depth - b.depth)) {
+          context.globalAlpha = Math.min(dot.a, 0.96);
+          context.beginPath();
+          context.arc(dot.x, dot.y, dot.r, 0, Math.PI * 2);
+          context.fill();
+        }
+        context.globalAlpha = 1;
+      }
+
+      function mountOrb(host: HTMLElement, size = 17) {
+        const canvas = document.createElement("canvas");
+        const density = Math.min(window.devicePixelRatio || 1, 3) * 2;
+        canvas.width = size * density;
+        canvas.height = size * density;
+        canvas.style.width = `${size}px`;
+        canvas.style.height = `${size}px`;
+        host.replaceChildren(canvas);
+        const context = canvas.getContext("2d");
+        if (!context) return () => {};
+        context.scale(density, density);
+        context.fillStyle = getComputedStyle(host).color;
+        let frame = 0;
+        const tick = () => {
+          drawOrb(context, size, performance.now() / 1000);
+          if (!reducedMotion) frame = requestAnimationFrame(tick);
+        };
+        tick();
+        return () => cancelAnimationFrame(frame);
+      }
+
+      // ---------- Pill: mirrors OverlayController ----------
+      type PillKind = "working" | "success" | "failure" | "message";
+      const pill = document.querySelector<HTMLElement>("[data-pill]")!;
+      const pillIcon = pill.querySelector<HTMLElement>("[data-pill-icon]")!;
+      const pillLabel = pill.querySelector<HTMLElement>("[data-pill-label]")!;
+      const pillMeasure = pill.querySelector<HTMLElement>("[data-pill-measure]")!;
+      let stopOrb: () => void = () => {};
+      let hideTimer = 0;
+
+      const icons: Record<Exclude<PillKind, "working">, string> = {
+        success:
+          '<svg viewBox="0 0 17 17"><circle cx="8.5" cy="8.5" r="8" fill="currentColor" opacity=".18"/><circle cx="8.5" cy="8.5" r="6.2" fill="currentColor"/><path d="M5.6 8.7l2 2 3.8-4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        failure:
+          '<svg viewBox="0 0 17 17"><path d="M8.5 2.2 15.6 14.3H1.4z" fill="currentColor"/><path d="M8.5 6.6v3.6M8.5 12.4v.2" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>',
+        message:
+          '<svg viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4.5h12M2.5 8.5h7M2.5 12.5h5"/><path d="M11 12.2l1.6 1.6 3-3.2"/></svg>',
+      };
+
+      function setPill(kind: PillKind, label: string, autoHideMs?: number) {
+        window.clearTimeout(hideTimer);
+        const visible = pill.dataset.state !== "hidden";
+        pillMeasure.textContent = label;
+        // Same arithmetic as targetWidth(for:) in OverlayController, plus rounding slack.
+        const width = Math.min(Math.max(Math.ceil(pillMeasure.offsetWidth) + 22 + 17 + 8 + 3, 88), 320);
+
+        const apply = () => {
+          stopOrb();
+          pill.dataset.state = kind;
+          pillLabel.textContent = label;
+          if (kind === "working") {
+            pillIcon.innerHTML = "";
+            stopOrb = mountOrb(pillIcon);
+          } else {
+            pillIcon.innerHTML = icons[kind];
+          }
+        };
+
+        if (visible && !reducedMotion) {
+          pill.classList.add("is-swapping");
+          pill.style.width = `${width}px`;
+          window.setTimeout(() => {
+            apply();
+            pill.classList.remove("is-swapping");
+          }, 120);
+        } else {
+          pill.style.transition = "none";
+          pill.style.width = `${width}px`;
+          apply();
+          void pill.offsetWidth;
+          pill.style.transition = "";
+        }
+
+        if (autoHideMs) hideTimer = window.setTimeout(hidePill, autoHideMs);
+      }
+
+      function hidePill() {
+        window.clearTimeout(hideTimer);
+        pill.dataset.state = "hidden";
+        stopOrb();
+      }
+
+      // ---------- Text spans that get mended ----------
+      async function swapText(span: HTMLElement, text: string) {
+        if (reducedMotion) {
+          span.textContent = text;
+          return;
+        }
+        span.classList.add("is-swapping");
+        await wait(120);
+        span.textContent = text;
+        span.classList.remove("is-swapping");
+        await wait(140);
+      }
+
+      function rememberOriginal(span: HTMLElement) {
+        span.dataset.original ??= (span.textContent ?? "").trim();
+      }
+
+      async function fixSpans(spans: HTMLElement[]) {
+        await Promise.all(
+          spans
+            .filter((span) => !span.classList.contains("is-fixed"))
+            .map(async (span) => {
+              rememberOriginal(span);
+              await swapText(span, span.dataset.fixed ?? "");
+              span.classList.add("is-fixed");
+            }),
+        );
+        spans.forEach((span) => span.classList.remove("is-selected"));
+      }
+
+      async function restoreSpans(spans: HTMLElement[]) {
+        spans.forEach((span) => span.classList.remove("is-selected"));
+        await Promise.all(
+          spans
+            .filter((span) => span.classList.contains("is-fixed"))
+            .map(async (span) => {
+              await swapText(span, span.dataset.original ?? "");
+              span.classList.remove("is-fixed");
+            }),
+        );
+      }
+
+      async function mend(spans: HTMLElement[]) {
+        spans.forEach((span) => {
+          rememberOriginal(span);
+          span.classList.add("is-selected");
+        });
+        await wait(reducedMotion ? 0 : 460);
+        setPill("working", "Fixing grammar…");
+        await wait(reducedMotion ? 200 : 1150);
+        await fixSpans(spans);
+        setPill("success", "Fixed", 1200);
+      }
+
+      // ---------- The draft on screen ----------
+      const doc = document.querySelector<HTMLElement>("[data-doc]")!;
+      const docSpans = Array.from(doc.querySelectorAll<HTMLElement>(".fix"));
+      const notesTitle = document.querySelector<HTMLElement>("[data-notes-title]")!;
+      const terminalLines = Array.from(document.querySelectorAll<HTMLElement>("[data-tline]"));
+
+      let userBusy = false;
+      let sceneToken = 0;
+      let currentScene = "";
+
+      const windowFor = (scene: string) =>
+        ["instruction", "model", "key"].includes(scene) ? "settings" : scene === "install" ? "terminal" : "notes";
+
+      async function applyScene(scene: string) {
+        const token = ++sceneToken;
+        const alive = () => token === sceneToken;
+        screen.dataset.scene = scene;
+        screen.dataset.win = windowFor(scene);
+        notesTitle.textContent = scene === "try" ? "Select a sentence, then press ⌃⌥G" : "Friday update — Notes";
+
+        if (userBusy) return;
+
+        switch (scene) {
+          case "draft":
+            hidePill();
+            await restoreSpans(docSpans);
+            if (alive()) runDraftLoop(alive);
+            break;
+          case "select":
+            hidePill();
+            await restoreSpans(docSpans);
+            if (alive()) docSpans.forEach((span) => span.classList.add("is-selected"));
+            break;
+          case "working":
+            await restoreSpans(docSpans);
+            if (!alive()) return;
+            docSpans.forEach((span) => span.classList.add("is-selected"));
+            setPill("working", "Fixing grammar…");
+            break;
+          case "fixed":
+            await fixSpans(docSpans);
+            if (alive()) setPill("success", "Fixed");
+            break;
+          case "try":
+            hidePill();
+            await restoreSpans(docSpans);
+            refreshTryStatus();
+            break;
+          case "install":
+            hidePill();
+            runTerminal(alive);
+            break;
+          default:
+            hidePill();
         }
       }
 
-      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        runDemo();
-      } else if (root && text && label) {
-        text.textContent = "I sent the revised proposal to the team this morning.";
-        label.textContent = "Fixed";
-        root.dataset.state = "fixed";
+      async function runDraftLoop(alive: () => boolean) {
+        if (reducedMotion) {
+          await fixSpans(docSpans);
+          return;
+        }
+        while (alive()) {
+          await wait(1500);
+          if (!alive() || userBusy) return;
+          docSpans.forEach((span) => span.classList.add("is-selected"));
+          await wait(620);
+          if (!alive()) return;
+          setPill("working", "Fixing grammar…");
+          await wait(1150);
+          if (!alive()) return;
+          await fixSpans(docSpans);
+          setPill("success", "Fixed", 1200);
+          await wait(2800);
+          if (!alive()) return;
+          await restoreSpans(docSpans);
+        }
       }
 
-      copyButton?.addEventListener("click", async () => {
-        const command = copyButton.getAttribute("data-copy");
-        if (!command) return;
+      async function runTerminal(alive: () => boolean) {
+        terminalLines.forEach((line) => line.classList.remove("is-shown"));
+        for (const [index, line] of terminalLines.entries()) {
+          await wait(reducedMotion ? 0 : index === 0 ? 300 : 520);
+          if (!alive()) return;
+          line.classList.add("is-shown");
+        }
+      }
+
+      // Which chapter sits in the middle of the viewport decides the scene.
+      const sceneTargets = Array.from(document.querySelectorAll<HTMLElement>("[data-scene]"));
+      let sceneTimer = 0;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const hit = entries.filter((entry) => entry.isIntersecting).pop();
+          if (!hit) return;
+          const next = (hit.target as HTMLElement).dataset.scene ?? "draft";
+          if (next === currentScene) return;
+          currentScene = next;
+          window.clearTimeout(sceneTimer);
+          sceneTimer = window.setTimeout(() => applyScene(next), 180);
+        },
+        { rootMargin: "-42% 0px -48% 0px", threshold: 0 },
+      );
+
+      // ---------- Try it ----------
+      const nextButton = document.querySelector<HTMLButtonElement>("[data-try-next]");
+      const tryStatus = document.querySelector<HTMLElement>("[data-try-status]");
+
+      const pendingSpans = () => docSpans.filter((span) => !span.classList.contains("is-fixed"));
+
+      function refreshTryStatus() {
+        const left = pendingSpans().length;
+        if (!tryStatus || !nextButton) return;
+        tryStatus.textContent = left === 0 ? "All fixed." : `${left} left`;
+        nextButton.textContent = left === 0 ? "Reset the draft" : "Mend the next sentence";
+      }
+
+      async function userMend(spans: HTMLElement[]) {
+        if (userBusy) return;
+        userBusy = true;
+        sceneToken += 1; // stop any running scene loop
         try {
-          await navigator.clipboard.writeText(command);
-        } catch {
-          const input = document.createElement("textarea");
-          input.value = command;
-          input.style.position = "fixed";
-          input.style.opacity = "0";
-          document.body.append(input);
-          input.select();
-          const legacyCopy = Reflect.get(document, "execCommand") as (
-            command: string,
-          ) => boolean;
-          legacyCopy.call(document, "copy");
-          input.remove();
+          await mend(spans);
+          window.getSelection()?.removeAllRanges();
+          refreshTryStatus();
+        } finally {
+          userBusy = false;
         }
-        const copyLabel = copyButton.querySelector("span");
-        if (copyLabel) copyLabel.textContent = "Copied";
-        setTimeout(() => {
-          if (copyLabel) copyLabel.textContent = "Copy";
-        }, 1600);
+      }
+
+      function selectedSpans() {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+          return { inside: false, spans: [] as HTMLElement[] };
+        }
+        const range = selection.getRangeAt(0);
+        return {
+          inside: doc.contains(range.commonAncestorContainer),
+          spans: pendingSpans().filter((span) => range.intersectsNode(span)),
+        };
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (!(event.ctrlKey && event.altKey && event.code === "KeyG")) return;
+        event.preventDefault();
+        if (userBusy) return;
+        const { inside, spans } = selectedSpans();
+        if (spans.length) {
+          userMend(spans);
+        } else if (inside) {
+          setPill("message", "No changes suggested", 2000);
+        } else {
+          setPill("failure", "Select some text first", 2500);
+        }
       });
+
+      nextButton?.addEventListener("click", async () => {
+        if (userBusy) return;
+        const pending = pendingSpans();
+        if (pending.length === 0) {
+          userBusy = true;
+          hidePill();
+          await restoreSpans(docSpans);
+          userBusy = false;
+          refreshTryStatus();
+          return;
+        }
+        const span = pending[0];
+        const selection = window.getSelection();
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(span);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        await userMend([span]);
+      });
+
+      // ---------- Copy buttons ----------
+      document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const command = button.dataset.copy ?? "";
+          try {
+            await navigator.clipboard.writeText(command);
+          } catch {
+            const input = document.createElement("textarea");
+            input.value = command;
+            input.style.position = "fixed";
+            input.style.opacity = "0";
+            document.body.append(input);
+            input.select();
+            // Fallback for browsers without the async clipboard API.
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            document.execCommand("copy");
+            input.remove();
+          }
+          const label = button.querySelector<HTMLElement>("[data-copy-label]");
+          if (!label) return;
+          const previous = label.textContent;
+          label.textContent = "Copied";
+          setTimeout(() => {
+            label.textContent = previous;
+          }, 1600);
+        });
+      });
+
+      // ---------- Menu bar clock ----------
+      const clock = document.querySelector<HTMLElement>("[data-clock]");
+      const formatter = new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const tickClock = () => {
+        if (clock) clock.textContent = formatter.format(new Date());
+      };
+      tickClock();
+      setInterval(tickClock, 15000);
+
+      // ---------- Boot: the headline fixes itself, then scenes follow the scroll ----------
+      (async () => {
+        const heroSpan = document.querySelector<HTMLElement>("[data-hero-title] .fix");
+        if (heroSpan) {
+          if (reducedMotion) {
+            heroSpan.textContent = heroSpan.dataset.fixed ?? "";
+            heroSpan.classList.add("is-fixed");
+          } else {
+            await wait(900);
+            await mend([heroSpan]);
+            await wait(900);
+          }
+        }
+        refreshTryStatus();
+        sceneTargets.forEach((target) => observer.observe(target));
+      })();
     </script>
   </body>
 </html>
