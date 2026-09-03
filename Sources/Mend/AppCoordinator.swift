@@ -13,7 +13,9 @@ final class AppCoordinator: NSObject {
         }
     }
 
-    private let settings = AppSettings()
+    private let settings = AppSettings(
+        readsAPIKeyFromKeychain: !CommandLine.arguments.contains("--preview-overlay")
+    )
     private let overlay = OverlayController()
     private let selectionService = SelectionService()
 
@@ -24,26 +26,27 @@ final class AppCoordinator: NSObject {
     private var activeTask: Task<Void, Never>?
 
     func start() {
+        let isPreviewingOverlay = CommandLine.arguments.contains("--preview-overlay")
+
         setMenuBarIconVisible(settings.showsMenuBarIcon)
 
         registerShortcut(settings.shortcut)
-        overlay.updateShortcutLabel(settings.shortcut.displayString)
-
         if hotKey == nil {
             overlay.show(.failure("Shortcut unavailable"))
         }
 
-        if settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !isPreviewingOverlay,
+           settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
-        } else if !settings.showsMenuBarIcon {
+        } else if !isPreviewingOverlay && !settings.showsMenuBarIcon {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
         }
 
-        if CommandLine.arguments.contains("--preview-overlay") {
+        if isPreviewingOverlay {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.showTestPill()
             }
@@ -182,7 +185,6 @@ final class AppCoordinator: NSObject {
             throw CoordinatorError.shortcutUnavailable
         }
         try settings.save()
-        overlay.updateShortcutLabel(settings.shortcut.displayString)
     }
 
     @discardableResult

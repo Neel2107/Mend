@@ -3,16 +3,19 @@ import SwiftUI
 
 // Change these values to explore the overlay without touching its behavior.
 enum OverlayDesign {
-    static let panelSize = NSSize(width: 272, height: 46)
+    static let initialPanelSize = NSSize(width: 210, height: 42)
+    static let minimumPanelWidth: CGFloat = 88
+    static let maximumPanelWidth: CGFloat = 320
     static let trailingMargin: CGFloat = 20
     static let bottomMargin: CGFloat = 18
 
-    static let horizontalPadding: CGFloat = 13
-    static let contentSpacing: CGFloat = 9
-    static let iconSize: CGFloat = 18
+    static let horizontalPadding: CGFloat = 11
+    static let contentSpacing: CGFloat = 8
+    static let iconSize: CGFloat = 17
     static let labelFontSize: CGFloat = 13
-    static let shortcutFontSize: CGFloat = 10
-    static let borderOpacity: CGFloat = 0.12
+    static let resizeDuration: TimeInterval = 0.42
+    static let contentTransitionDuration: TimeInterval = 0.24
+    static let transitionBlurRadius: CGFloat = 5
 }
 
 enum OverlayState: Equatable {
@@ -25,7 +28,6 @@ enum OverlayState: Equatable {
 @MainActor
 final class OverlayModel: ObservableObject {
     @Published var state: OverlayState = .working("Fixing grammar…")
-    @Published var shortcutLabel = GlobalShortcut.default.displayString
 }
 
 final class NonActivatingPanel: NSPanel {
@@ -41,7 +43,7 @@ final class OverlayController {
 
     init() {
         panel = NonActivatingPanel(
-            contentRect: NSRect(origin: .zero, size: OverlayDesign.panelSize),
+            contentRect: NSRect(origin: .zero, size: OverlayDesign.initialPanelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -58,8 +60,11 @@ final class OverlayController {
 
     func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
         hideTask?.cancel()
-        model.state = state
-        positionPanel()
+        let shouldAnimate = panel.isVisible
+        withAnimation(.easeInOut(duration: OverlayDesign.contentTransitionDuration)) {
+            model.state = state
+        }
+        resizeAndPositionPanel(for: state, animated: shouldAnimate)
         panel.orderFrontRegardless()
 
         if let seconds {
@@ -73,21 +78,56 @@ final class OverlayController {
         }
     }
 
-    func updateShortcutLabel(_ label: String) {
-        model.shortcutLabel = label
-    }
-
-    private func positionPanel() {
+    private func resizeAndPositionPanel(for state: OverlayState, animated: Bool) {
         // NSScreen.main follows the window of the currently active writing app.
         // The panel never activates Mend, so this remains the user's working screen.
         let screen = NSScreen.main
         guard let frame = screen?.visibleFrame else { return }
 
-        let origin = NSPoint(
-            x: frame.maxX - panel.frame.width - OverlayDesign.trailingMargin,
-            y: frame.minY + OverlayDesign.bottomMargin
+        let width = targetWidth(for: state)
+        // Keep the trailing edge visually fixed while the capsule grows or shrinks.
+        let anchoredFrame = NSRect(
+            x: frame.maxX - width - OverlayDesign.trailingMargin,
+            y: frame.minY + OverlayDesign.bottomMargin,
+            width: width,
+            height: OverlayDesign.initialPanelSize.height
         )
-        panel.setFrameOrigin(origin)
+
+        guard animated else {
+            panel.setFrame(anchoredFrame, display: true)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = OverlayDesign.resizeDuration
+            context.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.22,
+                1,
+                0.36,
+                1
+            )
+            panel.animator().setFrame(anchoredFrame, display: true)
+        }
+    }
+
+    private func targetWidth(for state: OverlayState) -> CGFloat {
+        let label: String
+        switch state {
+        case .working(let text), .success(let text), .failure(let text), .message(let text):
+            label = text
+        }
+
+        let font = NSFont.systemFont(ofSize: OverlayDesign.labelFontSize, weight: .medium)
+        let labelWidth = ceil((label as NSString).size(withAttributes: [.font: font]).width)
+        let width = (OverlayDesign.horizontalPadding * 2)
+            + OverlayDesign.iconSize
+            + OverlayDesign.contentSpacing
+            + labelWidth
+
+        return min(
+            max(width, OverlayDesign.minimumPanelWidth),
+            OverlayDesign.maximumPanelWidth
+        )
     }
 }
 
@@ -99,33 +139,31 @@ private struct OverlayView: View {
             icon
                 .frame(width: OverlayDesign.iconSize, height: OverlayDesign.iconSize)
 
-            Text(label)
-                .font(.system(size: OverlayDesign.labelFontSize, weight: .medium, design: .rounded))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer(minLength: 4)
-
-            if case .working = model.state {
-                Text(model.shortcutLabel)
-                    .font(.system(size: OverlayDesign.shortcutFontSize, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+            ZStack(alignment: .leading) {
+                Text(label)
+                    .font(.system(size: OverlayDesign.labelFontSize, weight: .medium, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .id(label)
+                    .transition(.mendBlur)
             }
+
         }
         .padding(.horizontal, OverlayDesign.horizontalPadding)
-        .frame(width: OverlayDesign.panelSize.width, height: OverlayDesign.panelSize.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.ultraThickMaterial, in: Capsule())
-        .overlay {
-            Capsule().strokeBorder(.white.opacity(OverlayDesign.borderOpacity), lineWidth: 1)
-        }
+        .animation(
+            .easeInOut(duration: OverlayDesign.contentTransitionDuration),
+            value: model.state
+        )
     }
 
     @ViewBuilder
     private var icon: some View {
         switch model.state {
         case .working:
-            ProgressView().controlSize(.mini)
+            SearchingOrb()
         case .success:
             Image(systemName: "checkmark.circle.fill")
                 .symbolRenderingMode(.hierarchical)
@@ -147,4 +185,25 @@ private struct OverlayView: View {
             return text
         }
     }
+}
+
+private struct BlurTransitionModifier: ViewModifier {
+    let radius: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .blur(radius: radius)
+            .opacity(opacity)
+    }
+}
+
+private extension AnyTransition {
+    static let mendBlur = AnyTransition.modifier(
+        active: BlurTransitionModifier(
+            radius: OverlayDesign.transitionBlurRadius,
+            opacity: 0
+        ),
+        identity: BlurTransitionModifier(radius: 0, opacity: 1)
+    )
 }

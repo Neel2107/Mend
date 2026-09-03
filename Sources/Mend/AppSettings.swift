@@ -60,19 +60,24 @@ final class AppSettings: ObservableObject {
 
     private var draftAPIKeys: [LLMProvider: String] = [:]
 
-    init() {
+    init(readsAPIKeyFromKeychain: Bool = true) {
         let defaults = UserDefaults.standard
         let savedEndpoint = defaults.string(forKey: Key.endpoint)
         let savedProviderValue = defaults.string(forKey: Key.provider)
         let savedProvider = savedProviderValue
             .flatMap(LLMProvider.init(rawValue:))
             ?? Self.inferProvider(from: savedEndpoint)
-        let savedAPIKey = KeychainStore.read(
-            service: "com.mend.api",
-            account: Self.keyAccount(for: savedProvider)
-        ) ?? (savedProviderValue == nil
-            ? KeychainStore.read(service: "com.mend.api", account: "provider-key")
-            : nil) ?? ""
+        let savedAPIKey: String
+        if readsAPIKeyFromKeychain {
+            savedAPIKey = KeychainStore.read(
+                service: "com.mend.api",
+                account: Self.keyAccount(for: savedProvider)
+            ) ?? (savedProviderValue == nil
+                ? KeychainStore.read(service: "com.mend.api", account: "provider-key")
+                : nil) ?? ""
+        } else {
+            savedAPIKey = ""
+        }
 
         provider = savedProvider
         endpoint = savedEndpoint ?? savedProvider.defaultEndpoint ?? ""
