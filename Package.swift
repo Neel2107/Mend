@@ -17,5 +17,9 @@ let package = Package(
                 .linkedFramework("Security"),
             ]
         ),
+        .testTarget(
+            name: "MendTests",
+            dependencies: ["Mend"]
+        ),
     ]
 )

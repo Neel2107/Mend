@@ -36,13 +36,56 @@ final class NonActivatingPanel: NSPanel {
 }
 
 @MainActor
+protocol OverlayPanelPresenting: AnyObject {
+    var isVisible: Bool { get }
+    func setOverlayFrame(_ frame: NSRect, animated: Bool)
+    func prepareForPresentation()
+    func showOverlay()
+    func hideOverlay()
+}
+
+extension NonActivatingPanel: OverlayPanelPresenting {
+    func setOverlayFrame(_ frame: NSRect, animated: Bool) {
+        guard animated else {
+            setFrame(frame, display: true)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = OverlayDesign.resizeDuration
+            context.timingFunction = CAMediaTimingFunction(
+                controlPoints: 0.22,
+                1,
+                0.36,
+                1
+            )
+            animator().setFrame(frame, display: true)
+        }
+    }
+
+    func prepareForPresentation() {
+        contentView?.layoutSubtreeIfNeeded()
+        displayIfNeeded()
+    }
+
+    func showOverlay() {
+        orderFrontRegardless()
+    }
+
+    func hideOverlay() {
+        orderOut(nil)
+    }
+}
+
+@MainActor
 final class OverlayController {
-    private let model = OverlayModel()
-    private let panel: NonActivatingPanel
+    private let model: OverlayModel
+    private let panel: any OverlayPanelPresenting
     private var hideTask: Task<Void, Never>?
 
     init() {
-        panel = NonActivatingPanel(
+        let model = OverlayModel()
+        let panel = NonActivatingPanel(
             contentRect: NSRect(origin: .zero, size: OverlayDesign.initialPanelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -56,23 +99,41 @@ final class OverlayController {
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = true
         panel.contentView = NSHostingView(rootView: OverlayView(model: model))
+        self.model = model
+        self.panel = panel
+    }
+
+    init(model: OverlayModel, panel: any OverlayPanelPresenting) {
+        self.model = model
+        self.panel = panel
     }
 
     func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
         hideTask?.cancel()
         let shouldAnimate = panel.isVisible
-        withAnimation(.easeInOut(duration: OverlayDesign.contentTransitionDuration)) {
+
+        if shouldAnimate {
+            withAnimation(.easeInOut(duration: OverlayDesign.contentTransitionDuration)) {
+                model.state = state
+            }
+        } else {
             model.state = state
         }
+
         resizeAndPositionPanel(for: state, animated: shouldAnimate)
-        panel.orderFrontRegardless()
+        if !shouldAnimate {
+            // SwiftUI commits view updates on the next layout pass. Commit the new
+            // state while the panel is hidden so its previous result never flashes.
+            panel.prepareForPresentation()
+        }
+        panel.showOverlay()
 
         if let seconds {
             hideTask = Task { [weak self] in
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self?.panel.orderOut(nil)
+                    self?.panel.hideOverlay()
                 }
             }
         }
@@ -93,21 +154,7 @@ final class OverlayController {
             height: OverlayDesign.initialPanelSize.height
         )
 
-        guard animated else {
-            panel.setFrame(anchoredFrame, display: true)
-            return
-        }
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = OverlayDesign.resizeDuration
-            context.timingFunction = CAMediaTimingFunction(
-                controlPoints: 0.22,
-                1,
-                0.36,
-                1
-            )
-            panel.animator().setFrame(anchoredFrame, display: true)
-        }
+        panel.setOverlayFrame(anchoredFrame, animated: animated)
     }
 
     private func targetWidth(for state: OverlayState) -> CGFloat {
