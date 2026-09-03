@@ -48,12 +48,7 @@ curl -fsSL https://mend.itsneel.com/install | sh
 
 The installer verifies the release checksum and installs Mend into `/Applications`. Launch it with `open /Applications/Mend.app`.
 
-To install manually:
-
-1. Download the latest Apple silicon DMG from [GitHub Releases](https://github.com/Neel2107/Mend/releases/latest).
-2. Open the DMG and drag **Mend** into **Applications**.
-3. Launch Mend from Applications, Spotlight, or Raycast.
-4. If macOS blocks the first launch, allow Mend under **System Settings → Privacy & Security → Open Anyway**.
+Run the same command again to update. To install by hand instead, download `Mend-app-aarch64-apple-darwin.tar.gz` from [GitHub Releases](https://github.com/Neel2107/Mend/releases/latest), extract it, and move **Mend** into **Applications**. If macOS blocks the first launch, allow Mend under **System Settings → Privacy & Security → Open Anyway**.
 
 For Gatekeeper, permissions, and release details, see the [installation guide](docs/INSTALL.md).
 
@@ -94,10 +89,10 @@ chmod +x Scripts/*.sh
 ./Scripts/run.sh
 ```
 
-Create an Apple silicon DMG locally with:
+Build a signed app bundle in `dist/` with:
 
 ```sh
-./Scripts/package-dmg.sh
+./Scripts/build-app.sh
 ```
 
 ## Privacy

@@ -14,32 +14,32 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Build Apple silicon DMG
-        id: package
+      - name: Build Apple silicon app
         env:
           VERSION: ${{ github.ref_name }}
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          VERSION="${VERSION#v}"
-          DMG_PATH="$(VERSION="$VERSION" BUILD_NUMBER="$BUILD_NUMBER" ./Scripts/package-dmg.sh)"
-          echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          VERSION="${VERSION#v}" \
+          BUILD_NUMBER="$BUILD_NUMBER" \
+          TARGET_TRIPLE="arm64-apple-macosx13.0" \
+            ./Scripts/build-app.sh
 
       - name: Package terminal installer archive
+        id: app_archive
         run: |
           set -euo pipefail
           archive="dist/Mend-app-aarch64-apple-darwin.tar.gz"
           tar -C dist -czf "$archive" Mend.app
           echo "archive_path=$archive" >> "$GITHUB_OUTPUT"
-        id: app_archive
 
       - name: Generate checksums
         run: |
           set -euo pipefail
-          dmg_name="$(basename "${{ steps.package.outputs.dmg_path }}")"
           archive_name="$(basename "${{ steps.app_archive.outputs.archive_path }}")"
           (
             cd dist
-            shasum -a 256 "$dmg_name" "$archive_name" > SHA256SUMS
+            shasum -a 256 "$archive_name" > SHA256SUMS
           )
 
       - name: Verify release artifacts
@@ -61,7 +61,6 @@ jobs:
         with:
           name: Mend-${{ github.ref_name }}-apple-silicon
           path: |
-            ${{ steps.package.outputs.dmg_path }}
             ${{ steps.app_archive.outputs.archive_path }}
             dist/SHA256SUMS
 
@@ -70,7 +69,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            "${{ steps.package.outputs.dmg_path }}" \
             "${{ steps.app_archive.outputs.archive_path }}" \
             dist/SHA256SUMS \
             --title "Mend ${GITHUB_REF_NAME#v}" \
