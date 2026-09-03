@@ -63,33 +63,27 @@ struct OverlayControllerTests {
         #expect(panel.stateWhenShown == .success("Fixed"))
     }
 
-    @Test("A new request dismisses its visible result before showing an error")
-    func testPreviousResultIsDismissedBeforeNoSelectionError() async {
+    @Test("A visible result transforms into a no-selection error")
+    func testVisibleResultTransformsIntoNoSelectionError() async {
         let model = OverlayModel()
         let panel = RecordingOverlayPanel(state: { model.state })
         let controller = OverlayController(model: model, panel: panel)
 
-        controller.show(.success("Fixed"))
+        controller.show(.success("Fixed"), autoHideAfter: 1.2)
         await controller.waitForPendingPresentation()
-        controller.dismiss()
-
-        #expect(panel.isVisible == false)
-        #expect(panel.events.last == .hide)
-        #expect(panel.isContentVisible == false)
+        controller.keepVisibleForNextState()
+        let eventCountBeforeFailure = panel.events.count
 
         controller.show(.failure("Select some text first"))
-        #expect(panel.stateWhenRevealed == .success("Fixed"))
-
-        await controller.waitForPendingPresentation()
 
         #expect(panel.isVisible)
-        #expect(
-            panel.statesWhenRevealed == [
-                .success("Fixed"),
-                .failure("Select some text first"),
-            ]
-        )
-        #expect(panel.stateWhenRevealed == .failure("Select some text first"))
+        #expect(panel.isContentVisible)
+        #expect(panel.events.dropFirst(eventCountBeforeFailure) == [
+            .setFrame(animated: true),
+            .show,
+        ])
+        #expect(panel.stateWhenShown == .failure("Select some text first"))
+        #expect(panel.statesWhenRevealed == [.success("Fixed")])
     }
 }
 

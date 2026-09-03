@@ -108,9 +108,9 @@ final class AppCoordinator: NSObject {
             return
         }
 
-        // A previous result may still be visible while the next selection is
-        // validated. Remove it immediately; the next UI appears after validation.
-        overlay.dismiss()
+        // Keep a visible result in place while selection is validated so the
+        // next state can transform in the same pill instead of reopening it.
+        overlay.keepVisibleForNextState()
 
         guard AXIsProcessTrusted() else {
             requestAccessibility()

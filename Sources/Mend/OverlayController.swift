@@ -171,10 +171,9 @@ final class OverlayController {
         }
     }
 
-    func dismiss() {
+    func keepVisibleForNextState() {
         hideTask?.cancel()
         hideTask = nil
-        hideOverlay()
     }
 
     func waitForPendingPresentation() async {
