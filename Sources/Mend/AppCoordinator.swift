@@ -150,11 +150,10 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
         globalMenuClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.isStatusMenuOpen else { return }
-                self.statusMenu?.cancelTracking()
-            }
+        ) { [weak menu = statusMenu] _ in
+            // Menu tracking runs its own modal event loop on the main thread.
+            // Cancel synchronously so another menu-bar panel cannot open behind it.
+            menu?.cancelTracking()
         }
     }
 
