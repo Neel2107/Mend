@@ -141,7 +141,7 @@ final class OverlayController {
         }
     }
 
-    private func hideAndPrepareForNextPresentation() {
+    func hideAndPrepareForNextPresentation() {
         panel.hideOverlay()
         model.state = OverlayModel.initialState
         panel.prepareForPresentation()

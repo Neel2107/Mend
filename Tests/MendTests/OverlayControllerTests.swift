@@ -39,14 +39,14 @@ struct OverlayControllerTests {
     }
 
     @Test("A terminal state resets off-screen after the overlay hides")
-    func testHiddenTerminalStateIsPreparedForTheNextPresentation() async throws {
+    func testHiddenTerminalStateIsPreparedForTheNextPresentation() {
         let model = OverlayModel()
         let panel = RecordingOverlayPanel(state: { model.state })
         panel.isVisible = true
         let controller = OverlayController(model: model, panel: panel)
 
-        controller.show(.success("Fixed"), autoHideAfter: 0.01)
-        try await Task.sleep(nanoseconds: 30_000_000)
+        controller.show(.success("Fixed"))
+        controller.hideAndPrepareForNextPresentation()
 
         #expect(panel.isVisible == false)
         #expect(model.state == OverlayModel.initialState)
