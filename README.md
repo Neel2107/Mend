@@ -33,6 +33,16 @@ Mend is a lightweight macOS writing assistant. Select text in any application, p
 
 ## Installation
 
+Install from Terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Neel2107/Mend/main/Scripts/install-app.sh | sh
+```
+
+The installer verifies the release checksum and installs Mend into `/Applications`. Launch it with `open /Applications/Mend.app`.
+
+To install manually:
+
 1. Download the latest Apple silicon DMG from [GitHub Releases](https://github.com/Neel2107/Mend/releases/latest).
 2. Open the DMG and drag **Mend** into **Applications**.
 3. Launch Mend from Applications, Spotlight, or Raycast.

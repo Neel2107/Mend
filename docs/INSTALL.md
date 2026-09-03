@@ -2,6 +2,16 @@
 
 Mend currently ships as an Apple-silicon-only app for M-series Macs.
 
+## Install from Terminal
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Neel2107/Mend/main/Scripts/install-app.sh | sh
+```
+
+The installer downloads the latest release archive, verifies it against the published SHA-256 checksum, and installs Mend into `/Applications`. It can also update an existing installation.
+
+## Install from a DMG
+
 1. Download `Mend-<version>-apple-silicon.dmg` from the GitHub Releases page.
 2. Open the disk image and drag **Mend** into **Applications**.
 3. Open Mend from Applications.

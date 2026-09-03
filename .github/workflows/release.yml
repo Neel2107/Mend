@@ -24,11 +24,46 @@ jobs:
           DMG_PATH="$(VERSION="$VERSION" BUILD_NUMBER="$BUILD_NUMBER" ./Scripts/package-dmg.sh)"
           echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
 
+      - name: Package terminal installer archive
+        run: |
+          set -euo pipefail
+          archive="dist/Mend-app-aarch64-apple-darwin.tar.gz"
+          tar -C dist -czf "$archive" Mend.app
+          echo "archive_path=$archive" >> "$GITHUB_OUTPUT"
+        id: app_archive
+
+      - name: Generate checksums
+        run: |
+          set -euo pipefail
+          dmg_name="$(basename "${{ steps.package.outputs.dmg_path }}")"
+          archive_name="$(basename "${{ steps.app_archive.outputs.archive_path }}")"
+          (
+            cd dist
+            shasum -a 256 "$dmg_name" "$archive_name" > SHA256SUMS
+          )
+
+      - name: Verify release artifacts
+        run: |
+          set -euo pipefail
+          archive="${{ steps.app_archive.outputs.archive_path }}"
+          tar -tzf "$archive" | grep -qx 'Mend.app/Contents/MacOS/Mend'
+          codesign --verify --deep --strict --verbose=2 dist/Mend.app
+
+          install_root="$(mktemp -d)"
+          trap 'rm -rf "$install_root"' EXIT
+          MEND_APPS_DIR="$install_root/Applications" \
+            MEND_APP_ARCHIVE="$archive" \
+            sh Scripts/install-app.sh
+          codesign --verify --deep --strict --verbose=2 "$install_root/Applications/Mend.app"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v6
         with:
           name: Mend-${{ github.ref_name }}-apple-silicon
-          path: ${{ steps.package.outputs.dmg_path }}
+          path: |
+            ${{ steps.package.outputs.dmg_path }}
+            ${{ steps.app_archive.outputs.archive_path }}
+            dist/SHA256SUMS
 
       - name: Create GitHub release
         env:
@@ -36,5 +71,8 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             "${{ steps.package.outputs.dmg_path }}" \
+            "${{ steps.app_archive.outputs.archive_path }}" \
+            dist/SHA256SUMS \
             --title "Mend ${GITHUB_REF_NAME#v}" \
-            --generate-notes
+            --generate-notes \
+            --verify-tag
