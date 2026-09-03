@@ -23,7 +23,7 @@ Mend is a lightweight macOS writing assistant. Select text in any application, p
 - Lets you customize the editing instruction, endpoint, and model
 - Shows compact progress and result notifications without interrupting your workflow
 - Restores clipboard contents after capturing and replacing text
-- Runs from the Dock, menu bar, Spotlight, or Raycast
+- Runs quietly in the background and stays accessible from the menu bar, Spotlight, or Raycast
 
 ## Requirements
 
@@ -69,6 +69,8 @@ Mend stores a separate Keychain entry for each provider.
 4. The corrected text replaces the selection in place.
 
 Press the shortcut again while a request is running to cancel it. You can hide the menu-bar icon from Settings without disabling the global shortcut.
+
+Closing Settings leaves Mend running in the background. Mend stays out of the Dock and Cmd-Tab while its global shortcut remains active.
 
 ## Build from source
 

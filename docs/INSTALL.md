@@ -19,7 +19,7 @@ The installer downloads the latest release archive, verifies it against the publ
 5. Use the Mend menu-bar icon to open **Settings**, choose a provider, and add its API key. The endpoint and model presets remain editable.
 6. Choose **Enable Accessibility** from the Mend menu and allow Mend in **System Settings → Privacy & Security → Accessibility**.
 
-Because Mend is installed in Applications, macOS indexes it as an application. You can launch it from the Dock or by searching for **Mend** in Spotlight or Raycast.
+Because Mend is installed in Applications, macOS indexes it as an application. Launch it from Applications or search for **Mend** in Spotlight or Raycast. Mend then runs in the background without appearing in the Dock or Cmd-Tab.
 
 You can hide Mend's menu-bar icon from its menu or from Settings. The rewrite shortcut remains active. Search for Mend in Spotlight or Raycast to reopen Settings and turn the icon back on.
 
