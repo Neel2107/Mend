@@ -64,11 +64,7 @@ final class AppCoordinator: NSObject {
         guard let statusItem else { return }
 
         if let button = statusItem.button {
-            let icon = NSApplication.shared.applicationIconImage.copy() as? NSImage
-            icon?.size = NSSize(width: 18, height: 18)
-            icon?.isTemplate = false
-            icon?.accessibilityDescription = "Mend"
-            button.image = icon
+            button.image = makeMenuBarIcon()
             button.imageScaling = .scaleProportionallyDown
             button.toolTip = "Mend"
         }
@@ -85,6 +81,22 @@ final class AppCoordinator: NSObject {
             item.target = self
         }
         statusItem.menu = menu
+    }
+
+    private func makeMenuBarIcon() -> NSImage? {
+        let icon = Bundle.main.url(
+            forResource: "MendMenuBarIcon",
+            withExtension: "png"
+        ).flatMap(NSImage.init(contentsOf:))
+            ?? NSImage(
+                systemSymbolName: "text.badge.checkmark",
+                accessibilityDescription: "Mend"
+            )
+
+        icon?.size = NSSize(width: 18, height: 18)
+        icon?.isTemplate = true
+        icon?.accessibilityDescription = "Mend"
+        return icon
     }
 
     private func setMenuBarIconVisible(_ isVisible: Bool) {

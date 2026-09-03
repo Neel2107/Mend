@@ -32,6 +32,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BINARY_PATH" "$APP_DIR/Contents/MacOS/Mend"
 cp "$PROJECT_DIR/Resources/Info.plist" "$APP_DIR/Contents/Info.plist"
 cp "$PROJECT_DIR/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/MendIcon.icns"
+cp "$PROJECT_DIR/Resources/AppIconForeground.png" "$APP_DIR/Contents/Resources/MendMenuBarIcon.png"
 cp -R "$PROJECT_DIR/Resources/ProviderIcons" "$APP_DIR/Contents/Resources/ProviderIcons"
 
 if [[ -n "${VERSION:-}" ]]; then
