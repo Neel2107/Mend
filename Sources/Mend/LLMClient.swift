@@ -12,6 +12,32 @@ struct ProviderConfiguration {
     let llm: LLMConfiguration
 }
 
+enum RewriteProvider {
+    case subscription(SubscriptionConfiguration, prompt: String)
+    case api(ProviderConfiguration)
+
+    var displayName: String {
+        switch self {
+        case .subscription(let configuration, _):
+            return configuration.provider.displayName
+        case .api(let configuration):
+            return configuration.provider.displayName
+        }
+    }
+
+    func rewrite(_ text: String) async throws -> String {
+        switch self {
+        case .subscription(let configuration, let prompt):
+            return try await SubscriptionClient(
+                configuration: configuration,
+                prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            ).rewrite(text)
+        case .api(let configuration):
+            return try await LLMClient(configuration: configuration.llm).rewrite(text)
+        }
+    }
+}
+
 struct LLMClient {
     let configuration: LLMConfiguration
 
