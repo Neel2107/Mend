@@ -25,6 +25,7 @@ enum OverlayState: Equatable {
 @MainActor
 final class OverlayModel: ObservableObject {
     @Published var state: OverlayState = .working("Fixing grammar…")
+    @Published var shortcutLabel = GlobalShortcut.default.displayString
 }
 
 final class NonActivatingPanel: NSPanel {
@@ -72,6 +73,10 @@ final class OverlayController {
         }
     }
 
+    func updateShortcutLabel(_ label: String) {
+        model.shortcutLabel = label
+    }
+
     private func positionPanel() {
         // NSScreen.main follows the window of the currently active writing app.
         // The panel never activates Mend, so this remains the user's working screen.
@@ -103,7 +108,7 @@ private struct OverlayView: View {
             Spacer(minLength: 4)
 
             if case .working = model.state {
-                Text("⌃⌥G")
+                Text(model.shortcutLabel)
                     .font(.system(size: OverlayDesign.shortcutFontSize, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
             }

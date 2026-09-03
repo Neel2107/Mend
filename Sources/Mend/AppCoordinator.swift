@@ -5,23 +5,29 @@ import SwiftUI
 
 @MainActor
 final class AppCoordinator: NSObject {
+    private enum CoordinatorError: LocalizedError {
+        case shortcutUnavailable
+
+        var errorDescription: String? {
+            "That shortcut is already being used by another app"
+        }
+    }
+
     private let settings = AppSettings()
     private let overlay = OverlayController()
     private let selectionService = SelectionService()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
     private var hotKey: HotKeyManager?
+    private var registeredShortcut: GlobalShortcut?
     private var settingsWindow: NSWindow?
     private var activeTask: Task<Void, Never>?
 
     func start() {
         configureMenuBar()
 
-        hotKey = HotKeyManager(keyCode: UInt32(kVK_ANSI_G), modifiers: UInt32(controlKey | optionKey)) { [weak self] in
-            Task { @MainActor in
-                self?.handleRewriteShortcut()
-            }
-        }
+        registerShortcut(settings.shortcut)
+        overlay.updateShortcutLabel(settings.shortcut.displayString)
 
         if hotKey == nil {
             overlay.show(.failure("Shortcut unavailable"))
@@ -120,14 +126,16 @@ final class AppCoordinator: NSObject {
         }
     }
 
-    @objc private func openSettings() {
+    @objc func openSettings() {
         if settingsWindow == nil {
-            let view = SettingsView(settings: settings)
+            let view = SettingsView(settings: settings) { [weak self] in
+                try self?.saveSettings()
+            }
             let controller = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: controller)
             window.title = "Mend Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 520, height: 510))
+            window.setContentSize(NSSize(width: 520, height: 640))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
@@ -135,6 +143,46 @@ final class AppCoordinator: NSObject {
 
         NSApplication.shared.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    private func saveSettings() throws {
+        guard registerShortcut(settings.shortcut) else {
+            throw CoordinatorError.shortcutUnavailable
+        }
+        try settings.save()
+        overlay.updateShortcutLabel(settings.shortcut.displayString)
+    }
+
+    @discardableResult
+    private func registerShortcut(_ shortcut: GlobalShortcut) -> Bool {
+        if registeredShortcut == shortcut, hotKey != nil {
+            return true
+        }
+
+        let previousShortcut = registeredShortcut
+        hotKey = nil
+        registeredShortcut = nil
+
+        if let newHotKey = makeHotKey(for: shortcut) {
+            hotKey = newHotKey
+            registeredShortcut = shortcut
+            return true
+        }
+
+        if let previousShortcut,
+           let restoredHotKey = makeHotKey(for: previousShortcut) {
+            hotKey = restoredHotKey
+            registeredShortcut = previousShortcut
+        }
+        return false
+    }
+
+    private func makeHotKey(for shortcut: GlobalShortcut) -> HotKeyManager? {
+        HotKeyManager(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers) { [weak self] in
+            Task { @MainActor in
+                self?.handleRewriteShortcut()
+            }
+        }
     }
 
     @objc private func requestAccessibility() {

@@ -25,6 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator?.start()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        coordinator?.openSettings()
+        return false
+    }
+
     private func installMainMenu() {
         let mainMenu = NSMenu(title: "Main Menu")
 
