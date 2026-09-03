@@ -4,7 +4,7 @@ import Carbon
 import SwiftUI
 
 @MainActor
-final class AppCoordinator: NSObject {
+final class AppCoordinator: NSObject, NSMenuDelegate {
     private enum CoordinatorError: LocalizedError {
         case shortcutUnavailable
         case providersFailed([LLMProvider], any Error)
@@ -27,6 +27,10 @@ final class AppCoordinator: NSObject {
     private let selectionService = SelectionService()
 
     private var statusItem: NSStatusItem?
+    private var statusMenu: NSMenu?
+    private var localMenuClickMonitor: Any?
+    private var globalMenuClickMonitor: Any?
+    private var isStatusMenuOpen = false
     private var hotKey: HotKeyManager?
     private var registeredShortcut: GlobalShortcut?
     private var settingsWindow: NSWindow?
@@ -80,7 +84,10 @@ final class AppCoordinator: NSObject {
         for item in menu.items {
             item.target = self
         }
+        menu.delegate = self
+        statusMenu = menu
         statusItem.menu = menu
+        installStatusMenuClickMonitors()
     }
 
     private func makeMenuBarIcon() -> NSImage? {
@@ -105,8 +112,60 @@ final class AppCoordinator: NSObject {
             statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             configureMenuBar()
         } else if let statusItem {
+            statusMenu?.cancelTracking()
+            statusMenu = nil
+            isStatusMenuOpen = false
+            removeStatusMenuClickMonitors()
             NSStatusBar.system.removeStatusItem(statusItem)
             self.statusItem = nil
+        }
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === statusMenu else { return }
+        isStatusMenuOpen = true
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === statusMenu else { return }
+        isStatusMenuOpen = false
+    }
+
+    private func installStatusMenuClickMonitors() {
+        guard localMenuClickMonitor == nil, globalMenuClickMonitor == nil else { return }
+
+        localMenuClickMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] event in
+            guard let self, self.isStatusMenuOpen else { return event }
+
+            let clickedStatusIcon = event.windowNumber
+                == self.statusItem?.button?.window?.windowNumber
+            let clickedInsideMenu = event.window?.level == .popUpMenu
+            guard clickedStatusIcon || !clickedInsideMenu else { return event }
+
+            self.statusMenu?.cancelTracking()
+            return clickedStatusIcon ? nil : event
+        }
+
+        globalMenuClickMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isStatusMenuOpen else { return }
+                self.statusMenu?.cancelTracking()
+            }
+        }
+    }
+
+    private func removeStatusMenuClickMonitors() {
+        if let localMenuClickMonitor {
+            NSEvent.removeMonitor(localMenuClickMonitor)
+            self.localMenuClickMonitor = nil
+        }
+        if let globalMenuClickMonitor {
+            NSEvent.removeMonitor(globalMenuClickMonitor)
+            self.globalMenuClickMonitor = nil
         }
     }
 
