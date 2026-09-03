@@ -5,22 +5,15 @@ set -euo pipefail
 developer_dir="$(xcode-select -p)"
 testing_frameworks="$developer_dir/Library/Developer/Frameworks"
 testing_libraries="$developer_dir/Library/Developer/usr/lib"
-swift_test_args=()
 
-if [[ -d "$testing_frameworks/Testing.framework" ]]; then
-  swift_test_args+=(
-    -Xswiftc "-F$testing_frameworks"
-    -Xlinker "-F$testing_frameworks"
-    -Xlinker -rpath
-    -Xlinker "$testing_frameworks"
-  )
-fi
-
-if [[ -d "$testing_libraries" ]]; then
-  swift_test_args+=(
-    -Xlinker -rpath
+if [[ -d "$testing_frameworks/Testing.framework" && -d "$testing_libraries" ]]; then
+  swift test \
+    -Xswiftc "-F$testing_frameworks" \
+    -Xlinker "-F$testing_frameworks" \
+    -Xlinker -rpath \
+    -Xlinker "$testing_frameworks" \
+    -Xlinker -rpath \
     -Xlinker "$testing_libraries"
-  )
+else
+  swift test
 fi
-
-swift test "${swift_test_args[@]}"
