@@ -6,7 +6,7 @@ enum MendApplication {
         let application = NSApplication.shared
         let delegate = AppDelegate()
 
-        application.setActivationPolicy(.accessory)
+        application.setActivationPolicy(.regular)
         application.delegate = delegate
 
         withExtendedLifetime(delegate) {
@@ -84,6 +84,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
         mainMenu.addItem(editItem)
         mainMenu.setSubmenu(editMenu, for: editItem)
+
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(NSMenuItem(
+            title: "Close Window",
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        ))
+        mainMenu.addItem(windowItem)
+        mainMenu.setSubmenu(windowMenu, for: windowItem)
 
         NSApplication.shared.mainMenu = mainMenu
     }
