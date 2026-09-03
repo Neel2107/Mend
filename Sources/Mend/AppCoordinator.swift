@@ -274,6 +274,8 @@ final class AppCoordinator: NSObject {
             try? await Task.sleep(nanoseconds: 1_400_000_000)
             overlay.show(.success("Fixed"))
             try? await Task.sleep(nanoseconds: 1_100_000_000)
+            overlay.show(.message("No changes suggested"))
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
             overlay.show(.failure("Couldn’t replace text"), autoHideAfter: 1.8)
         }
     }
