@@ -46,6 +46,13 @@ enum SubscriptionProvider: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var executionProfile: String? {
+        switch self {
+        case .codex: return "GPT-5.6 Luna · Low · Fast"
+        case .claude: return nil
+        }
+    }
+
     var executableURL: URL? {
         let executableName = rawValue
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -306,6 +313,9 @@ struct SubscriptionClient: Sendable {
                 "--ignore-rules",
                 "--sandbox", "read-only",
                 "--cd", workingDirectory.path,
+                "--model", "gpt-5.6-luna",
+                "--config", "model_reasoning_effort=\"low\"",
+                "--config", "service_tier=\"priority\"",
                 "--output-schema", schemaURL.path,
                 "--output-last-message", outputURL.path,
                 "-",

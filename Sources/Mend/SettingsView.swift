@@ -218,6 +218,12 @@ private struct SubscriptionProviderRow: View {
                 Text(statusDescription)
                     .font(.callout)
                     .foregroundStyle(statusColor)
+
+                if let executionProfile = provider.executionProfile {
+                    Text(executionProfile)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer(minLength: 12)
