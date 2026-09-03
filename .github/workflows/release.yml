@@ -25,7 +25,7 @@ jobs:
           echo "dmg_path=$DMG_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Mend-${{ github.ref_name }}-apple-silicon
           path: ${{ steps.package.outputs.dmg_path }}
