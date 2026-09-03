@@ -9,19 +9,20 @@ Mend currently ships as an Apple-silicon-only app for M-series Macs.
 5. Use the Mend menu-bar icon to open **Settings**, choose a provider, and add its API key. The endpoint and model presets remain editable.
 6. Choose **Enable Accessibility** from the Mend menu and allow Mend in **System Settings → Privacy & Security → Accessibility**.
 
-Because Mend is installed in Applications, macOS indexes it as an application. You can launch it by searching for **Mend** in Spotlight or Raycast. Mend stays in the menu bar after launch and does not add a Dock icon.
+Because Mend is installed in Applications, macOS indexes it as an application. You can launch it from the Dock or by searching for **Mend** in Spotlight or Raycast.
 
 You can hide Mend's menu-bar icon from its menu or from Settings. The rewrite shortcut remains active. Search for Mend in Spotlight or Raycast to reopen Settings and turn the icon back on.
 
-The extra approval in step 4 is needed because this small private build is ad-hoc signed. A Developer ID-signed and Apple-notarized release removes that warning.
+The additional approval in step 4 is required because releases are ad-hoc signed. Developer ID signing and Apple notarization would remove this warning.
 
 ## Create a release
 
-Update the version in `Resources/Info.plist`, commit the change, and push a matching tag:
+Update the version and build number in `Resources/Info.plist`, commit the change, and push a matching tag:
 
 ```sh
-git tag v0.2.1
-git push origin v0.2.1
+VERSION="<version>"
+git tag "v$VERSION"
+git push origin "v$VERSION"
 ```
 
 The release workflow builds an ARM64 DMG and attaches it to a new GitHub release.
@@ -29,7 +30,7 @@ The release workflow builds an ARM64 DMG and attaches it to a new GitHub release
 To build the same package locally without publishing it:
 
 ```sh
-VERSION=0.2.1 ./Scripts/package-dmg.sh
+VERSION="<version>" BUILD_NUMBER="<build-number>" ./Scripts/package-dmg.sh
 ```
 
 The DMG is written to `dist/`.

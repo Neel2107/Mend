@@ -4,80 +4,85 @@
   <img src="Resources/AppIcon.png" alt="Mend app icon" width="144">
 </p>
 
-**Fix selected text without leaving the app you are writing in.**
+<p align="center"><strong>Correct selected text anywhere on macOS with one shortcut.</strong></p>
 
-[![Build](https://github.com/Neel2107/Mend/actions/workflows/ci.yml/badge.svg)](https://github.com/Neel2107/Mend/actions/workflows/ci.yml)
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/Neel2107/Mend/actions/workflows/ci.yml"><img src="https://github.com/Neel2107/Mend/actions/workflows/ci.yml/badge.svg" alt="Build status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+</p>
 
-Mend is a small macOS menu-bar app that fixes selected text without making you leave the app you are writing in.
+Mend is a lightweight macOS writing assistant. Select text in any application, press a global shortcut, and Mend replaces it with a corrected version using your preferred AI provider.
 
-1. Select text in any app.
-2. Press your shortcut (initially **Control–Option–G**).
-3. Mend sends the selection through your saved instruction.
-4. The corrected text replaces the selection in place.
+## Features
 
-A compact, non-activating status pill appears at the bottom-right of the current screen while Mend works. Press the shortcut again to cancel an in-flight request.
-
-The menu-bar icon can be hidden from its menu or from Settings. The global shortcut keeps working; reopen Mend through Spotlight or Raycast to show Settings and restore the icon.
+- Corrects grammar, spelling, punctuation, and phrasing in place
+- Works across macOS applications through a configurable global shortcut
+- Supports OpenAI, Gemini, and custom OpenAI-compatible endpoints
+- Stores API keys in macOS Keychain
+- Lets you customize the editing instruction, endpoint, and model
+- Shows compact progress and result notifications without interrupting your workflow
+- Restores clipboard contents after capturing and replacing text
+- Runs from the Dock, menu bar, Spotlight, or Raycast
 
 ## Requirements
 
+- Apple silicon Mac
 - macOS 13 or later
-- An OpenAI, Gemini, or OpenAI-compatible provider API key
-- Accessibility permission, used only to read and replace the selection
+- An API key for OpenAI, Gemini, or an OpenAI-compatible provider
+- Accessibility permission for reading and replacing selected text
 
-## Privacy
+## Installation
 
-- Your API key is stored in macOS Keychain.
-- Mend sends selected text only to the provider endpoint you configure.
-- Mend has no analytics, account system, or hosted backend.
-- Clipboard contents are restored after selection capture and replacement.
+1. Download the latest Apple silicon DMG from [GitHub Releases](https://github.com/Neel2107/Mend/releases/latest).
+2. Open the DMG and drag **Mend** into **Applications**.
+3. Launch Mend from Applications, Spotlight, or Raycast.
+4. If macOS blocks the first launch, allow Mend under **System Settings → Privacy & Security → Open Anyway**.
 
-## Build and run
+For Gatekeeper, permissions, and release details, see the [installation guide](docs/INSTALL.md).
+
+## Setup
+
+1. Open **Mend Settings** from the app or menu-bar icon.
+2. Choose OpenAI, Gemini, or Custom.
+3. Enter the API key, confirm the endpoint and model, and select **Save**.
+4. Allow Mend under **System Settings → Privacy & Security → Accessibility**.
+5. Configure the rewrite shortcut if you do not want the default, **Control–Option–G**.
+
+Mend stores a separate Keychain entry for each provider.
+
+## Usage
+
+1. Select text in any application.
+2. Press the configured shortcut.
+3. Mend sends the selection and saved instruction to the configured provider.
+4. The corrected text replaces the selection in place.
+
+Press the shortcut again while a request is running to cancel it. You can hide the menu-bar icon from Settings without disabling the global shortcut.
+
+## Build from source
+
+Xcode Command Line Tools and Swift 5.10 or later are required.
 
 ```sh
+git clone https://github.com/Neel2107/Mend.git
+cd Mend
 chmod +x Scripts/*.sh
 ./Scripts/run.sh
 ```
 
-Mend appears in the menu bar. Open **Settings…**, choose OpenAI, Gemini, or Custom, enter that provider's API key, and save. Gemini uses Google's supported OpenAI-compatible endpoint with `gemini-2.5-flash` by default.
-
-On the first rewrite, macOS asks for Accessibility permission. Enable Mend in **System Settings → Privacy & Security → Accessibility**, then retry the shortcut.
-
-Release builds use a stable designated code-signing requirement so macOS can preserve that Accessibility grant across local rebuilds.
-
-## Install on another Mac
-
-Apple-silicon DMGs are available from [GitHub Releases](https://github.com/Neel2107/Mend/releases). Download the latest DMG, open it, and drag Mend into Applications.
-
-These small private releases are ad-hoc signed, so macOS requires a one-time approval under **System Settings → Privacy & Security → Open Anyway**. See [`docs/INSTALL.md`](docs/INSTALL.md) for the complete setup and release instructions.
-
-## v0 scope
-
-- Native menu-bar app
-- Configurable global shortcut
-- Accessibility selection capture with clipboard fallback
-- OpenAI-compatible provider configuration
-- Built-in OpenAI and Gemini provider presets with separate Keychain entries
-- API key stored in macOS Keychain
-- Editable saved instruction
-- Bottom-screen working, success, and error states
-- In-place replacement with clipboard restoration
-
-The v0 uses plain text. Rich-text formatting and configurable shortcuts are intentionally deferred.
-
-## Experiment with the overlay UI
-
-All visual values are grouped in `OverlayDesign` at the top of `Sources/Mend/OverlayController.swift`. Change the panel size, screen margins, spacing, typography, or border opacity there, then rebuild and preview:
+Create an Apple silicon DMG locally with:
 
 ```sh
-./Scripts/run.sh --preview-overlay
+./Scripts/package-dmg.sh
 ```
 
-Open the Mend menu-bar icon and choose **Preview overlay states** to cycle through working, success, and error appearances without making an API request.
+## Privacy
 
-See [`docs/UI_EXPERIMENTS.md`](docs/UI_EXPERIMENTS.md) for suggested directions and the exact files involved.
+- API keys are stored locally in macOS Keychain.
+- Selected text is sent only to the provider endpoint configured in Settings.
+- Mend does not include analytics, user accounts, or a hosted backend.
+- Clipboard contents are restored after each operation.
 
 ## License
 
-MIT
+Mend is available under the [MIT License](LICENSE).
