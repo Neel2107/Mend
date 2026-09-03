@@ -5,6 +5,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     let onSave: @MainActor () throws -> Void
+    let onMenuBarVisibilityChange: @MainActor (Bool) -> Void
     @State private var saveMessage = ""
 
     var body: some View {
@@ -76,11 +77,13 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.borderless)
                     }
+
+                    Toggle("Show Mend in the menu bar", isOn: menuBarVisibilityBinding)
                 } header: {
-                    Text("Shortcut")
+                    Text("Controls")
                         .font(.headline)
                 } footer: {
-                    Text("Page Up, Page Down, Home, End, and function keys work alone. Letter and number keys require Command, Control, or Option. Escape cancels recording.")
+                    Text("Navigation and function keys work alone; letters and numbers need a modifier. Escape cancels recording. If the icon is hidden, search for Mend in Spotlight or Raycast.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -113,7 +116,7 @@ struct SettingsView: View {
             .padding(.vertical, 14)
             .background(.bar)
         }
-        .frame(minWidth: 500, minHeight: 640)
+        .frame(minWidth: 500, minHeight: 700)
     }
 
     private var messageColor: Color {
@@ -141,6 +144,13 @@ struct SettingsView: View {
         case .custom:
             return "Uses an OpenAI-compatible chat-completions endpoint. Its key is stored separately in macOS Keychain."
         }
+    }
+
+    private var menuBarVisibilityBinding: Binding<Bool> {
+        Binding(
+            get: { settings.showsMenuBarIcon },
+            set: { onMenuBarVisibilityChange($0) }
+        )
     }
 }
 

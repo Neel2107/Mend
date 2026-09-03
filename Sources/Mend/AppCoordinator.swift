@@ -16,15 +16,15 @@ final class AppCoordinator: NSObject {
     private let settings = AppSettings()
     private let overlay = OverlayController()
     private let selectionService = SelectionService()
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
+    private var statusItem: NSStatusItem?
     private var hotKey: HotKeyManager?
     private var registeredShortcut: GlobalShortcut?
     private var settingsWindow: NSWindow?
     private var activeTask: Task<Void, Never>?
 
     func start() {
-        configureMenuBar()
+        setMenuBarIconVisible(settings.showsMenuBarIcon)
 
         registerShortcut(settings.shortcut)
         overlay.updateShortcutLabel(settings.shortcut.displayString)
@@ -34,6 +34,10 @@ final class AppCoordinator: NSObject {
         }
 
         if settings.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            DispatchQueue.main.async { [weak self] in
+                self?.openSettings()
+            }
+        } else if !settings.showsMenuBarIcon {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
@@ -47,6 +51,8 @@ final class AppCoordinator: NSObject {
     }
 
     private func configureMenuBar() {
+        guard let statusItem else { return }
+
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: "Mend")
             button.toolTip = "Mend"
@@ -56,6 +62,7 @@ final class AppCoordinator: NSObject {
         menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Enable Accessibility…", action: #selector(requestAccessibility), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Preview overlay states", action: #selector(showTestPill), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Hide Menu Bar Icon", action: #selector(hideMenuBarIcon), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Mend", action: #selector(quit), keyEquivalent: "q"))
 
@@ -63,6 +70,24 @@ final class AppCoordinator: NSObject {
             item.target = self
         }
         statusItem.menu = menu
+    }
+
+    private func setMenuBarIconVisible(_ isVisible: Bool) {
+        if isVisible {
+            guard statusItem == nil else { return }
+            statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+            configureMenuBar()
+        } else if let statusItem {
+            NSStatusBar.system.removeStatusItem(statusItem)
+            self.statusItem = nil
+        }
+    }
+
+    @objc private func hideMenuBarIcon() {
+        settings.setMenuBarIconVisible(false)
+        DispatchQueue.main.async { [weak self] in
+            self?.setMenuBarIconVisible(false)
+        }
     }
 
     private func handleRewriteShortcut() {
@@ -128,14 +153,21 @@ final class AppCoordinator: NSObject {
 
     @objc func openSettings() {
         if settingsWindow == nil {
-            let view = SettingsView(settings: settings) { [weak self] in
-                try self?.saveSettings()
-            }
+            let view = SettingsView(
+                settings: settings,
+                onSave: { [weak self] in
+                    try self?.saveSettings()
+                },
+                onMenuBarVisibilityChange: { [weak self] isVisible in
+                    self?.settings.setMenuBarIconVisible(isVisible)
+                    self?.setMenuBarIconVisible(isVisible)
+                }
+            )
             let controller = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: controller)
             window.title = "Mend Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 520, height: 640))
+            window.setContentSize(NSSize(width: 520, height: 700))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window

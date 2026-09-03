@@ -11,6 +11,8 @@ Mend currently ships as an Apple-silicon-only app for M-series Macs.
 
 Because Mend is installed in Applications, macOS indexes it as an application. You can launch it by searching for **Mend** in Spotlight or Raycast. Mend stays in the menu bar after launch and does not add a Dock icon.
 
+You can hide Mend's menu-bar icon from its menu or from Settings. The rewrite shortcut remains active. Search for Mend in Spotlight or Raycast to reopen Settings and turn the icon back on.
+
 The extra approval in step 4 is needed because this small private build is ad-hoc signed. A Developer ID-signed and Apple-notarized release removes that warning.
 
 ## Create a release
@@ -18,8 +20,8 @@ The extra approval in step 4 is needed because this small private build is ad-ho
 Update the version in `Resources/Info.plist`, commit the change, and push a matching tag:
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 The release workflow builds an ARM64 DMG and attaches it to a new GitHub release.
@@ -27,7 +29,7 @@ The release workflow builds an ARM64 DMG and attaches it to a new GitHub release
 To build the same package locally without publishing it:
 
 ```sh
-VERSION=0.1.1 ./Scripts/package-dmg.sh
+VERSION=0.2.1 ./Scripts/package-dmg.sh
 ```
 
 The DMG is written to `dist/`.

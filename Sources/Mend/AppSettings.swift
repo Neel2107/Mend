@@ -47,6 +47,7 @@ final class AppSettings: ObservableObject {
         static let prompt = "rewritePrompt"
         static let shortcut = "globalShortcut"
         static let provider = "apiProvider"
+        static let showsMenuBarIcon = "showsMenuBarIcon"
     }
 
     @Published private(set) var provider: LLMProvider
@@ -55,6 +56,7 @@ final class AppSettings: ObservableObject {
     @Published var prompt: String
     @Published var apiKey: String
     @Published var shortcut: GlobalShortcut
+    @Published private(set) var showsMenuBarIcon: Bool
 
     private var draftAPIKeys: [LLMProvider: String] = [:]
 
@@ -83,7 +85,13 @@ final class AppSettings: ObservableObject {
         } else {
             shortcut = .default
         }
+        showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
         draftAPIKeys[savedProvider] = savedAPIKey
+    }
+
+    func setMenuBarIconVisible(_ isVisible: Bool) {
+        showsMenuBarIcon = isVisible
+        UserDefaults.standard.set(isVisible, forKey: Key.showsMenuBarIcon)
     }
 
     func selectProvider(_ newProvider: LLMProvider) {

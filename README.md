@@ -14,6 +14,8 @@ Mend is a small macOS menu-bar app that fixes selected text without making you l
 
 A compact, non-activating status pill appears at the bottom-right of the current screen while Mend works. Press the shortcut again to cancel an in-flight request.
 
+The menu-bar icon can be hidden from its menu or from Settings. The global shortcut keeps working; reopen Mend through Spotlight or Raycast to show Settings and restore the icon.
+
 ## Requirements
 
 - macOS 13 or later
