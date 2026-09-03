@@ -6,13 +6,13 @@ import SwiftUI
 @MainActor
 final class AppCoordinator: NSObject, NSMenuDelegate {
     private enum CoordinatorError: LocalizedError {
-        case shortcutUnavailable
+        case shortcutUnavailable(String)
         case providersFailed([LLMProvider], any Error)
 
         var errorDescription: String? {
             switch self {
-            case .shortcutUnavailable:
-                return "That shortcut is already being used by another app"
+            case .shortcutUnavailable(let action):
+                return "The shortcut for “\(action)” is already in use"
             case .providersFailed(let providers, let lastError):
                 let names = providers.map(\.displayName).joined(separator: " and ")
                 return "\(names) failed: \(lastError.localizedDescription)"
@@ -31,8 +31,8 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     private var localMenuClickMonitor: Any?
     private var globalMenuClickMonitor: Any?
     private var isStatusMenuOpen = false
-    private var hotKey: HotKeyManager?
-    private var registeredShortcut: GlobalShortcut?
+    private var hotKeys: [UUID: HotKeyManager] = [:]
+    private var registeredActions: [RewriteAction] = []
     private var settingsWindow: NSWindow?
     private var activeTask: Task<Void, Never>?
 
@@ -41,13 +41,12 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
         setMenuBarIconVisible(settings.showsMenuBarIcon)
 
-        registerShortcut(settings.shortcut)
-        if hotKey == nil {
-            overlay.show(.failure("Shortcut unavailable"))
+        if let unavailable = registerShortcuts(for: settings.actions) {
+            overlay.show(.failure("Shortcut for “\(unavailable.displayName)” unavailable"), autoHideAfter: 5)
         }
 
         if !isPreviewingOverlay,
-           settings.availableProviderConfigurations.isEmpty {
+           !settings.hasUsableProvider {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
@@ -76,7 +75,12 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Enable Accessibility…", action: #selector(requestAccessibility), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Preview overlay states", action: #selector(showTestPill), keyEquivalent: ""))
+        // Hold Option while the menu is open to reveal the overlay preview.
+        let previewItem = NSMenuItem(title: "Preview Overlay States", action: #selector(showTestPill), keyEquivalent: "")
+        previewItem.keyEquivalentModifierMask = [.option]
+        previewItem.isAlternate = true
+        menu.addItem(previewItem)
+        menu.addItem(NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Hide Menu Bar Icon", action: #selector(hideMenuBarIcon), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Mend", action: #selector(quit), keyEquivalent: "q"))
@@ -175,7 +179,9 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         }
     }
 
-    private func handleRewriteShortcut() {
+    private func handleShortcut(for actionID: UUID) {
+        guard let action = settings.action(id: actionID) else { return }
+
         if let activeTask {
             activeTask.cancel()
             self.activeTask = nil
@@ -193,7 +199,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             return
         }
 
-        let providerConfigurations = settings.availableProviderConfigurations
+        let providerConfigurations = settings.availableProviderConfigurations(prompt: action.prompt)
         guard !providerConfigurations.isEmpty else {
             openSettings()
             overlay.show(.failure("Add an API key in Settings"), autoHideAfter: 4)
@@ -207,7 +213,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
                 let selection = try await selectionService.captureSelection()
                 try Task.checkCancellation()
 
-                overlay.show(.working("Fixing grammar…"))
+                overlay.show(.working(action.workingLabel))
 
                 let result = try await rewrite(
                     selection.text,
@@ -300,40 +306,52 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     }
 
     private func saveSettings() throws {
-        guard registerShortcut(settings.shortcut) else {
-            throw CoordinatorError.shortcutUnavailable
+        if let unavailable = registerShortcuts(for: settings.actions) {
+            throw CoordinatorError.shortcutUnavailable(unavailable.displayName)
         }
         try settings.save()
     }
 
+    /// Registers a hotkey for every action that has a shortcut. Returns the
+    /// first action whose shortcut could not be registered, after restoring
+    /// the previous set so the user keeps working shortcuts.
     @discardableResult
-    private func registerShortcut(_ shortcut: GlobalShortcut) -> Bool {
-        if registeredShortcut == shortcut, hotKey != nil {
-            return true
+    private func registerShortcuts(for actions: [RewriteAction]) -> RewriteAction? {
+        if actions == registeredActions, hotKeys.count == actions.filter({ $0.shortcut != nil }).count {
+            return nil
         }
 
-        let previousShortcut = registeredShortcut
-        hotKey = nil
-        registeredShortcut = nil
+        let previousActions = registeredActions
+        hotKeys = [:]
+        registeredActions = []
 
-        if let newHotKey = makeHotKey(for: shortcut) {
-            hotKey = newHotKey
-            registeredShortcut = shortcut
-            return true
+        if let unavailable = installHotKeys(for: actions) {
+            hotKeys = [:]
+            installHotKeys(for: previousActions)
+            registeredActions = previousActions
+            return unavailable
         }
 
-        if let previousShortcut,
-           let restoredHotKey = makeHotKey(for: previousShortcut) {
-            hotKey = restoredHotKey
-            registeredShortcut = previousShortcut
-        }
-        return false
+        registeredActions = actions
+        return nil
     }
 
-    private func makeHotKey(for shortcut: GlobalShortcut) -> HotKeyManager? {
+    @discardableResult
+    private func installHotKeys(for actions: [RewriteAction]) -> RewriteAction? {
+        for action in actions {
+            guard let shortcut = action.shortcut else { continue }
+            guard let hotKey = makeHotKey(for: shortcut, actionID: action.id) else {
+                return action
+            }
+            hotKeys[action.id] = hotKey
+        }
+        return nil
+    }
+
+    private func makeHotKey(for shortcut: GlobalShortcut, actionID: UUID) -> HotKeyManager? {
         HotKeyManager(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers) { [weak self] in
             Task { @MainActor in
-                self?.handleRewriteShortcut()
+                self?.handleShortcut(for: actionID)
             }
         }
     }
@@ -352,6 +370,39 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             overlay.show(.message("No changes suggested"))
             try? await Task.sleep(nanoseconds: 1_300_000_000)
             overlay.show(.failure("Couldn’t replace text"), autoHideAfter: 1.8)
+        }
+    }
+
+    @objc private func checkForUpdates() {
+        Task { @MainActor in
+            overlay.show(.working("Checking for updates…"))
+            let alert = NSAlert()
+            var downloadURL: URL?
+
+            do {
+                switch try await UpdateChecker().check() {
+                case .upToDate(let version):
+                    alert.messageText = "Mend is up to date"
+                    alert.informativeText = "Version \(version) is the latest release."
+                    alert.addButton(withTitle: "OK")
+                case .available(let version, let url):
+                    downloadURL = url
+                    alert.messageText = "Mend \(version) is available"
+                    alert.informativeText = "You have version \(UpdateChecker.currentVersion). Re-run the installer or download the new release from GitHub."
+                    alert.addButton(withTitle: "Download")
+                    alert.addButton(withTitle: "Not Now")
+                }
+            } catch {
+                alert.messageText = "Couldn’t check for updates"
+                alert.informativeText = error.localizedDescription
+                alert.addButton(withTitle: "OK")
+            }
+
+            overlay.show(.message("Checked for updates"), autoHideAfter: 0.8)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn, let downloadURL {
+                NSWorkspace.shared.open(downloadURL)
+            }
         }
     }
 

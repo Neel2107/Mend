@@ -14,6 +14,12 @@ struct ProviderConfiguration {
 
 struct LLMClient {
     let configuration: LLMConfiguration
+    var session: URLSession = .shared
+
+    /// Corrections should be repeatable, so requests ask for a deterministic
+    /// sample. Models that only accept their default temperature reject the
+    /// parameter, and those requests are retried without it.
+    static let temperature: Double = 0
 
     func rewrite(_ text: String) async throws -> String {
         guard let url = URL(string: configuration.endpoint),
@@ -22,11 +28,22 @@ struct LLMClient {
             throw MendError.invalidEndpoint
         }
 
+        do {
+            return try await send(text, to: url, temperature: Self.temperature)
+        } catch MendError.serviceError(let message)
+            where message.localizedCaseInsensitiveContains("temperature") {
+            return try await send(text, to: url, temperature: nil)
+        }
+    }
+
+    private func send(_ text: String, to url: URL, temperature: Double?) async throws -> String {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 45
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        if !configuration.apiKey.isEmpty {
+            request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        }
 
         let body = ChatRequest(
             model: configuration.model,
@@ -42,11 +59,12 @@ struct LLMClient {
                     </selected_text>
                     """
                 ),
-            ]
+            ],
+            temperature: temperature
         )
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw MendError.invalidResponse
         }
@@ -75,6 +93,7 @@ private struct ChatRequest: Encodable {
 
     let model: String
     let messages: [Message]
+    let temperature: Double?
 }
 
 private struct ChatResponse: Decodable {

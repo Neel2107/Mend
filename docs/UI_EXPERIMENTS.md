@@ -12,7 +12,7 @@ Both live in `Sources/Mend/OverlayController.swift`. The values you will change 
 1. Change one or two `OverlayDesign` values.
 2. Run `./Scripts/run.sh --preview-overlay` from the repository root.
 
-The app rebuilds and relaunches, then cycles through working, success, and error without using your API key. You can also trigger the same preview from **Mend menu-bar icon → Preview overlay states**.
+The app rebuilds and relaunches, then cycles through working, success, and error without using your API key. You can also trigger the same preview from the menu-bar icon: hold **Option** while the menu is open and choose **Preview Overlay States**.
 
 ## Useful directions to try
 

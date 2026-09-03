@@ -46,39 +46,33 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    TextEditor(text: $settings.prompt)
-                        .font(.system(size: 13))
-                        .frame(minHeight: 130)
-                        .padding(6)
-                        .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 7)
-                                .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-                        }
+                    ForEach($settings.actions) { $action in
+                        ActionEditor(
+                            action: $action,
+                            canRemove: settings.actions.count > 1,
+                            onShortcutChange: { saveMessage = "Shortcut changed — save to apply" },
+                            onRemove: { settings.removeAction(id: action.id) }
+                        )
+                    }
+
+                    Button {
+                        settings.addAction()
+                    } label: {
+                        Label("Add Action", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
                 } header: {
-                    Text("Instruction")
+                    Text("Actions")
                         .font(.headline)
                 } footer: {
-                    Text("The selected text is appended securely and treated as content rather than an instruction.")
+                    Text("Each action has its own instruction and shortcut. The selected text is appended securely and treated as content rather than an instruction.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 Section {
-                    HStack {
-                        Text("Rewrite selected text")
-                        Spacer()
-                        ShortcutRecorder(shortcut: $settings.shortcut) {
-                            saveMessage = "Shortcut changed — save to apply"
-                        }
-                        Button("Reset") {
-                            settings.shortcut = .default
-                            saveMessage = "Shortcut changed — save to apply"
-                        }
-                        .buttonStyle(.borderless)
-                    }
-
                     Toggle("Show Mend in the menu bar", isOn: menuBarVisibilityBinding)
+                    Toggle("Open Mend at login", isOn: launchAtLoginBinding)
                 } header: {
                     Text("Controls")
                         .font(.headline)
@@ -98,9 +92,9 @@ struct SettingsView: View {
                         .foregroundStyle(messageColor)
                 }
                 Spacer()
-                Button("Restore Prompt") {
-                    settings.prompt = AppSettings.defaultPrompt
-                    saveMessage = ""
+                Button("Restore Defaults") {
+                    settings.restoreDefaultActions()
+                    saveMessage = "Actions restored — save to apply"
                 }
                 Button("Save") {
                     do {
@@ -142,7 +136,7 @@ struct SettingsView: View {
         case .gemini:
             return "Uses Google's OpenAI-compatible Gemini endpoint. Your Gemini key is stored separately in macOS Keychain."
         case .custom:
-            return "Uses an OpenAI-compatible chat-completions endpoint. Its key is stored separately in macOS Keychain."
+            return "Uses an OpenAI-compatible chat-completions endpoint. Leave the key empty for local servers that do not need one."
         }
     }
 
@@ -151,6 +145,54 @@ struct SettingsView: View {
             get: { settings.showsMenuBarIcon },
             set: { onMenuBarVisibilityChange($0) }
         )
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { settings.launchesAtLogin },
+            set: { isEnabled in
+                do {
+                    try settings.setLaunchesAtLogin(isEnabled)
+                    saveMessage = ""
+                } catch {
+                    saveMessage = error.localizedDescription
+                }
+            }
+        )
+    }
+}
+
+private struct ActionEditor: View {
+    @Binding var action: RewriteAction
+    let canRemove: Bool
+    let onShortcutChange: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("Name", text: $action.name)
+                    .textFieldStyle(.roundedBorder)
+                ShortcutRecorder(shortcut: $action.shortcut, onChange: onShortcutChange)
+                Button(role: .destructive, action: onRemove) {
+                    Image(systemName: "minus.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!canRemove)
+                .help("Remove this action")
+            }
+
+            TextEditor(text: $action.prompt)
+                .font(.system(size: 13))
+                .frame(minHeight: 96)
+                .padding(6)
+                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 7)
+                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
+                }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -200,24 +242,43 @@ private struct APIProviderPicker: View {
 }
 
 private struct ShortcutRecorder: View {
-    @Binding var shortcut: GlobalShortcut
+    @Binding var shortcut: GlobalShortcut?
     let onChange: () -> Void
 
     @State private var isRecording = false
     @State private var eventMonitor: Any?
 
     var body: some View {
-        Button {
-            beginRecording()
-        } label: {
-            Text(isRecording ? "Press shortcut…" : shortcut.displayString)
-                .font(.system(.body, design: .rounded).weight(.semibold))
-                .frame(minWidth: 72)
+        HStack(spacing: 4) {
+            Button {
+                beginRecording()
+            } label: {
+                Text(label)
+                    .font(.system(.body, design: .rounded).weight(.semibold))
+                    .frame(minWidth: 72)
+            }
+            .buttonStyle(.bordered)
+
+            if shortcut != nil {
+                Button {
+                    shortcut = nil
+                    onChange()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help("Clear the shortcut")
+            }
         }
-        .buttonStyle(.bordered)
         .onDisappear {
             stopRecording()
         }
+    }
+
+    private var label: String {
+        if isRecording { return "Press shortcut…" }
+        return shortcut?.displayString ?? "Record Shortcut"
     }
 
     private func beginRecording() {

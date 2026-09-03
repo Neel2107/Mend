@@ -43,35 +43,65 @@ enum LLMProvider: String, CaseIterable, Identifiable {
     }
 }
 
+/// One thing Mend can do to a selection: an instruction and the shortcut that runs it.
+struct RewriteAction: Codable, Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var prompt: String
+    var shortcut: GlobalShortcut?
+
+    init(id: UUID = UUID(), name: String, prompt: String, shortcut: GlobalShortcut?) {
+        self.id = id
+        self.name = name
+        self.prompt = prompt
+        self.shortcut = shortcut
+    }
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Rewrite" : trimmed
+    }
+
+    /// What the overlay shows while this action runs.
+    var workingLabel: String { "\(displayName)…" }
+
+    static func makeDefault() -> RewriteAction {
+        RewriteAction(name: "Fix grammar", prompt: AppSettings.defaultPrompt, shortcut: .default)
+    }
+}
+
 @MainActor
 final class AppSettings: ObservableObject {
-    static let defaultPrompt = """
+    nonisolated static let defaultPrompt = """
     Correct grammar, spelling, punctuation, and awkward phrasing. Preserve the writer's meaning, tone, formatting, and level of formality. Make the smallest changes needed. Return only the corrected text.
     """
 
     private enum Key {
         static let endpoint = "apiEndpoint"
         static let model = "apiModel"
-        static let prompt = "rewritePrompt"
-        static let shortcut = "globalShortcut"
         static let provider = "apiProvider"
         static let showsMenuBarIcon = "showsMenuBarIcon"
+        static let actions = "rewriteActions"
+        // Settings from before actions existed. Read once for migration.
+        static let legacyPrompt = "rewritePrompt"
+        static let legacyShortcut = "globalShortcut"
     }
 
     @Published private(set) var provider: LLMProvider
     @Published var endpoint: String
     @Published var model: String
-    @Published var prompt: String
     @Published var apiKey: String
-    @Published var shortcut: GlobalShortcut
+    @Published var actions: [RewriteAction]
     @Published private(set) var showsMenuBarIcon: Bool
+    @Published private(set) var launchesAtLogin: Bool
 
     private var draftAPIKeys: [LLMProvider: String] = [:]
-    private let readsAPIKeyFromKeychain: Bool
+    private let defaults: UserDefaults
+    private let usesKeychain: Bool
 
-    init(readsAPIKeyFromKeychain: Bool = true) {
-        self.readsAPIKeyFromKeychain = readsAPIKeyFromKeychain
-        let defaults = UserDefaults.standard
+    init(readsAPIKeyFromKeychain: Bool = true, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        usesKeychain = readsAPIKeyFromKeychain
         let savedEndpoint = defaults.string(forKey: Key.endpoint)
         let savedProviderValue = defaults.string(forKey: Key.provider)
         let savedProvider = savedProviderValue
@@ -97,22 +127,63 @@ final class AppSettings: ObservableObject {
         } else {
             model = savedModel ?? savedProvider.defaultModel ?? ""
         }
-        prompt = defaults.string(forKey: Key.prompt) ?? Self.defaultPrompt
+        actions = Self.loadActions(from: defaults)
         apiKey = savedAPIKey
-        if let data = defaults.data(forKey: Key.shortcut),
-           let savedShortcut = try? JSONDecoder().decode(GlobalShortcut.self, from: data) {
-            shortcut = savedShortcut
-        } else {
-            shortcut = .default
-        }
         showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
+        launchesAtLogin = LoginItem.isEnabled
         draftAPIKeys[savedProvider] = savedAPIKey
     }
 
+    private static func loadActions(from defaults: UserDefaults) -> [RewriteAction] {
+        if let data = defaults.data(forKey: Key.actions),
+           let saved = try? JSONDecoder().decode([RewriteAction].self, from: data),
+           !saved.isEmpty {
+            return saved
+        }
+
+        var migrated = RewriteAction.makeDefault()
+        if let prompt = defaults.string(forKey: Key.legacyPrompt) {
+            migrated.prompt = prompt
+        }
+        if let data = defaults.data(forKey: Key.legacyShortcut),
+           let shortcut = try? JSONDecoder().decode(GlobalShortcut.self, from: data) {
+            migrated.shortcut = shortcut
+        }
+        return [migrated]
+    }
+
+    // MARK: Actions
+
+    func addAction() {
+        actions.append(RewriteAction(name: "New action", prompt: Self.defaultPrompt, shortcut: nil))
+    }
+
+    func removeAction(id: UUID) {
+        guard actions.count > 1 else { return }
+        actions.removeAll { $0.id == id }
+    }
+
+    func restoreDefaultActions() {
+        actions = [RewriteAction.makeDefault()]
+    }
+
+    func action(id: UUID) -> RewriteAction? {
+        actions.first { $0.id == id }
+    }
+
+    // MARK: Menu bar and login
+
     func setMenuBarIconVisible(_ isVisible: Bool) {
         showsMenuBarIcon = isVisible
-        UserDefaults.standard.set(isVisible, forKey: Key.showsMenuBarIcon)
+        defaults.set(isVisible, forKey: Key.showsMenuBarIcon)
     }
+
+    func setLaunchesAtLogin(_ isEnabled: Bool) throws {
+        try LoginItem.setEnabled(isEnabled)
+        launchesAtLogin = LoginItem.isEnabled
+    }
+
+    // MARK: Providers
 
     func selectProvider(_ newProvider: LLMProvider) {
         guard newProvider != provider else { return }
@@ -128,21 +199,15 @@ final class AppSettings: ObservableObject {
         }
 
         apiKey = draftAPIKeys[newProvider]
-            ?? KeychainStore.read(service: "com.mend.api", account: Self.keyAccount(for: newProvider))
+            ?? (usesKeychain
+                ? KeychainStore.read(service: "com.mend.api", account: Self.keyAccount(for: newProvider))
+                : nil)
             ?? ""
         draftAPIKeys[newProvider] = apiKey
     }
 
-    var configuration: LLMConfiguration {
-        LLMConfiguration(
-            endpoint: endpoint.trimmingCharacters(in: .whitespacesAndNewlines),
-            model: model.trimmingCharacters(in: .whitespacesAndNewlines),
-            prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-            apiKey: apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-    }
-
-    var availableProviderConfigurations: [ProviderConfiguration] {
+    /// The providers worth trying for one action, the selected one first.
+    func availableProviderConfigurations(prompt: String) -> [ProviderConfiguration] {
         let providers = [provider] + LLMProvider.allCases.filter { $0 != provider }
         let sharedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -172,16 +237,22 @@ final class AppSettings: ObservableObject {
                 prompt: sharedPrompt,
                 apiKey: candidateAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
             )
-            guard !configuration.apiKey.isEmpty else { return nil }
+            // Local servers behind a custom endpoint often need no key.
+            let hasCredentials = !configuration.apiKey.isEmpty || candidate == .custom
+            guard hasCredentials, !configuration.endpoint.isEmpty else { return nil }
             return ProviderConfiguration(provider: candidate, llm: configuration)
         }
+    }
+
+    var hasUsableProvider: Bool {
+        !availableProviderConfigurations(prompt: Self.defaultPrompt).isEmpty
     }
 
     private func storedAPIKey(for provider: LLMProvider) -> String {
         if let cachedKey = draftAPIKeys[provider] {
             return cachedKey
         }
-        guard readsAPIKeyFromKeychain else { return "" }
+        guard usesKeychain else { return "" }
 
         let savedKey = KeychainStore.read(
             service: "com.mend.api",
@@ -191,15 +262,19 @@ final class AppSettings: ObservableObject {
         return savedKey
     }
 
+    // MARK: Saving
+
     func save() throws {
-        let defaults = UserDefaults.standard
         defaults.set(endpoint, forKey: Key.endpoint)
         defaults.set(model, forKey: Key.model)
-        defaults.set(prompt, forKey: Key.prompt)
         defaults.set(provider.rawValue, forKey: Key.provider)
-        defaults.set(try JSONEncoder().encode(shortcut), forKey: Key.shortcut)
-        try KeychainStore.save(apiKey, service: "com.mend.api", account: Self.keyAccount(for: provider))
+        defaults.set(try JSONEncoder().encode(actions), forKey: Key.actions)
         draftAPIKeys[provider] = apiKey
+        guard usesKeychain else { return }
+        // Keys typed for other providers before switching back are kept too.
+        for (candidate, key) in draftAPIKeys {
+            try KeychainStore.save(key, service: "com.mend.api", account: Self.keyAccount(for: candidate))
+        }
     }
 
     private static func keyAccount(for provider: LLMProvider) -> String {

@@ -437,7 +437,7 @@ const terminalLines = [
           span.classList.add("is-selected");
         });
         await wait(reducedMotion ? 0 : 460);
-        setPill("working", "Fixing grammar…");
+        setPill("working", "Fix grammar…");
         await wait(reducedMotion ? 200 : 1150);
         await fixSpans(spans);
         setPill("success", "Fixed", 1200);
@@ -480,7 +480,7 @@ const terminalLines = [
             await restoreSpans(docSpans);
             if (!alive()) return;
             docSpans.forEach((span) => span.classList.add("is-selected"));
-            setPill("working", "Fixing grammar…");
+            setPill("working", "Fix grammar…");
             break;
           case "fixed":
             await fixSpans(docSpans);
@@ -511,7 +511,7 @@ const terminalLines = [
           docSpans.forEach((span) => span.classList.add("is-selected"));
           await wait(620);
           if (!alive()) return;
-          setPill("working", "Fixing grammar…");
+          setPill("working", "Fix grammar…");
           await wait(1150);
           if (!alive()) return;
           await fixSpans(docSpans);

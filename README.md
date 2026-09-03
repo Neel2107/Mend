@@ -25,7 +25,8 @@ Mend is a lightweight macOS writing assistant. Select text in any application, p
 - Supports OpenAI, Gemini, and custom OpenAI-compatible endpoints
 - Falls back to another configured provider when a request fails
 - Stores API keys in macOS Keychain
-- Lets you customize the editing instruction, endpoint, and model
+- Lets you save several actions, each with its own instruction and shortcut: fix grammar, tighten, translate
+- Lets you customize the endpoint and model
 - Shows compact progress and result notifications without interrupting your workflow
 - Restores clipboard contents after capturing and replacing text
 - Runs quietly in the background and stays accessible from the menu bar, Spotlight, or Raycast
@@ -60,20 +61,25 @@ For Gatekeeper, permissions, and release details, see the [installation guide](d
 
 1. Open **Mend Settings** from the app or menu-bar icon.
 2. Choose OpenAI, Gemini, or Custom.
-3. Enter the API key, confirm the endpoint and model, and select **Save**.
+3. Enter the API key, confirm the endpoint and model, and select **Save**. A custom endpoint can be saved without a key for local servers such as Ollama or LM Studio.
 4. Allow Mend under **System Settings → Privacy & Security → Accessibility**.
-5. Configure the rewrite shortcut if you do not want the default, **Control–Option–G**.
+5. Configure the shortcut for **Fix grammar** if you do not want the default, **Control–Option–G**.
+6. Add more actions under **Actions**, each with its own instruction and shortcut.
 
-Mend stores a separate Keychain entry for each provider.
+Mend stores a separate Keychain entry for each provider. Turn on **Open Mend at login** in Settings to keep it running after a restart.
 
 ## Usage
 
 1. Select text in any application.
-2. Press the configured shortcut.
-3. Mend sends the selection and saved instruction to the selected provider. If that request fails, it tries another provider with a saved API key.
+2. Press the shortcut of the action you want.
+3. Mend sends the selection and that action's instruction to the selected provider. If that request fails, it tries another provider with a saved API key.
 4. The corrected text replaces the selection in place.
 
 Press the shortcut again while a request is running to cancel it. You can hide the menu-bar icon from Settings without disabling the global shortcut.
+
+Mend replaces the selection through Accessibility when the app supports it and falls back to pasting otherwise. The pasted text is plain, so in rich-text editors such as Notes or Pages the corrected selection loses bold, italics, and links.
+
+Choose **Check for Updates…** from the menu-bar icon to compare your version with the latest GitHub release.
 
 Closing Settings leaves Mend running in the background. Mend stays out of the Dock and Cmd-Tab while its global shortcut remains active.
 

@@ -148,7 +148,9 @@ private let mendHotKeyHandler: EventHandlerUPP = { _, event, userData in
         return status
     }
 
+    // Every manager installs a handler, so each one only answers its own id.
     let manager = Unmanaged<HotKeyManager>.fromOpaque(userData).takeUnretainedValue()
+    guard hotKeyID.id == manager.id else { return noErr }
     manager.invoke()
     return noErr
 }
@@ -156,12 +158,17 @@ private let mendHotKeyHandler: EventHandlerUPP = { _, event, userData in
 final class HotKeyManager {
     static let signature: OSType = 0x4D454E44 // MEND
 
+    private static var nextID: UInt32 = 1
+
+    let id: UInt32
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandlerRef: EventHandlerRef?
     private let action: () -> Void
 
     init?(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) {
         self.action = action
+        id = Self.nextID
+        Self.nextID += 1
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -179,7 +186,7 @@ final class HotKeyManager {
 
         guard handlerStatus == noErr else { return nil }
 
-        let identifier = EventHotKeyID(signature: Self.signature, id: 1)
+        let identifier = EventHotKeyID(signature: Self.signature, id: id)
         let registrationStatus = RegisterEventHotKey(
             keyCode,
             modifiers,
