@@ -64,7 +64,12 @@ final class AppCoordinator: NSObject {
         guard let statusItem else { return }
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "text.badge.checkmark", accessibilityDescription: "Mend")
+            let icon = NSApplication.shared.applicationIconImage.copy() as? NSImage
+            icon?.size = NSSize(width: 18, height: 18)
+            icon?.isTemplate = false
+            icon?.accessibilityDescription = "Mend"
+            button.image = icon
+            button.imageScaling = .scaleProportionallyDown
             button.toolTip = "Mend"
         }
 
