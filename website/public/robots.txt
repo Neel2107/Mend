@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mend.itsneel.com/sitemap.xml

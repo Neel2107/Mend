@@ -7,6 +7,11 @@
 <p align="center"><strong>Correct selected text anywhere on macOS with one shortcut.</strong></p>
 
 <p align="center">
+  <a href="https://mend.itsneel.com">Website</a> ·
+  <a href="https://github.com/Neel2107/Mend/releases/latest">Download</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/Neel2107/Mend/actions/workflows/ci.yml"><img src="https://github.com/Neel2107/Mend/actions/workflows/ci.yml/badge.svg" alt="Build status"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
@@ -37,7 +42,7 @@ Mend is a lightweight macOS writing assistant. Select text in any application, p
 Install from Terminal:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Neel2107/Mend/main/Scripts/install-app.sh | sh
+curl -fsSL https://mend.itsneel.com/install | sh
 ```
 
 The installer verifies the release checksum and installs Mend into `/Applications`. Launch it with `open /Applications/Mend.app`.

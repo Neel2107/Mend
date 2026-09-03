@@ -1,0 +1,273 @@
+---
+import appIcon from "../../../Resources/AppIcon.png?url";
+import menuMark from "../../../Resources/AppIconForeground.png?url";
+import "../styles/global.css";
+
+const github = "https://github.com/Neel2107/Mend";
+const releases = `${github}/releases/latest`;
+const installCommand = "curl -fsSL https://mend.itsneel.com/install | sh";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta
+      name="description"
+      content="Mend corrects selected text anywhere on macOS with one shortcut. Open source, private, and built for Apple silicon."
+    />
+    <meta property="og:title" content="Mend — write first, mend the rest" />
+    <meta
+      property="og:description"
+      content="Correct selected text anywhere on macOS with one shortcut."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://mend.itsneel.com" />
+    <meta property="og:image" content={new URL(appIcon, Astro.site)} />
+    <link rel="icon" type="image/png" href={appIcon} />
+    <title>Mend — write first, mend the rest</title>
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Mend home">
+        <img src={appIcon} alt="" width="34" height="34" />
+        <span>Mend</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#how-it-works">How it works</a>
+        <a href="#privacy">Privacy</a>
+        <a class="github-link" href={github} target="_blank" rel="noreferrer">
+          GitHub
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M5.25 10.75 10.75 5.25M6.25 5.25h4.5v4.5"></path>
+          </svg>
+        </a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow reveal reveal-one">
+            <span class="status-dot"></span>
+            Native macOS writing assistant
+          </div>
+          <h1 class="reveal reveal-two">Write first.<br /><em>Mend</em> the rest.</h1>
+          <p class="hero-description reveal reveal-three">
+            Select text in any app, press one shortcut, and get a cleaner version
+            exactly where you wrote it.
+          </p>
+          <div class="hero-actions reveal reveal-four">
+            <a class="button button-primary" href={releases} target="_blank" rel="noreferrer">
+              Download for Mac
+              <svg viewBox="0 0 18 18" aria-hidden="true">
+                <path d="M9 2.75v8.5M5.75 8.25 9 11.5l3.25-3.25M3 14.25h12"></path>
+              </svg>
+            </a>
+            <a class="button button-secondary" href={github} target="_blank" rel="noreferrer">
+              View source
+            </a>
+          </div>
+          <p class="requirements reveal reveal-five">Apple silicon · macOS 13+ · MIT licensed</p>
+        </div>
+
+        <div class="demo-shell reveal reveal-demo" data-demo>
+          <div class="demo-topbar">
+            <div class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span>Draft</span>
+            <div class="menu-mark">
+              <img src={menuMark} alt="" />
+            </div>
+          </div>
+          <div class="editor" aria-label="Animated example of Mend correcting text">
+            <p class="editor-label">PROJECT UPDATE</p>
+            <p class="editor-text" aria-live="polite" data-demo-text>
+              I has sent the revised proposal to the team this morning.
+            </p>
+            <div class="selection" aria-hidden="true" data-selection></div>
+            <span class="caret" aria-hidden="true"></span>
+          </div>
+          <div class="mend-pill" data-pill aria-hidden="true">
+            <span class="pill-icon" data-pill-icon>
+              <i></i><i></i><i></i>
+            </span>
+            <span data-pill-label>Fixing grammar…</span>
+          </div>
+          <p class="demo-caption"><span>⌥ /</span> wherever you write</p>
+        </div>
+      </section>
+
+      <section class="principle" aria-label="Product principle">
+        <p>Keep the meaning.</p>
+        <p>Lose the friction.</p>
+      </section>
+
+      <section class="how" id="how-it-works">
+        <div class="section-heading">
+          <p class="section-kicker">Three small steps</p>
+          <h2>It stays out of your way.</h2>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="step-number">01</span>
+            <div>
+              <h3>Select</h3>
+              <p>Highlight a sentence in Mail, Slack, Notes, your browser, or anywhere else.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-number">02</span>
+            <div>
+              <h3>Shortcut</h3>
+              <p>Press your chosen global shortcut. Mend works quietly in the background.</p>
+            </div>
+          </li>
+          <li>
+            <span class="step-number">03</span>
+            <div>
+              <h3>Continue</h3>
+              <p>Your selection is replaced in place. No tabs, copying, or broken concentration.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="feature-grid">
+        <article class="feature feature-wide">
+          <div>
+            <p class="section-kicker">Your instruction</p>
+            <h2>Grammar is only the beginning.</h2>
+            <p>
+              Save any editing prompt: tighten a paragraph, simplify technical language,
+              change the tone, or translate a message.
+            </p>
+          </div>
+          <div class="prompt-card">
+            <span>Instruction</span>
+            <p>Correct grammar and awkward phrasing. Preserve my meaning and tone. Return only the corrected text.</p>
+            <div class="prompt-footer"><i></i> Saved locally</div>
+          </div>
+        </article>
+
+        <article class="feature provider-card">
+          <p class="section-kicker">Bring your model</p>
+          <h3>OpenAI, Gemini, or your own endpoint.</h3>
+          <div class="provider-list" aria-label="Supported providers">
+            <span>OpenAI</span><i></i><span>Gemini</span><i></i><span>Custom</span>
+          </div>
+        </article>
+
+        <article class="feature privacy-card" id="privacy">
+          <p class="section-kicker">Private by design</p>
+          <h3>Your key stays in macOS Keychain.</h3>
+          <p>No accounts, analytics, or hosted Mend backend.</p>
+          <svg class="keyhole" viewBox="0 0 80 80" aria-hidden="true">
+            <circle cx="40" cy="34" r="13"></circle>
+            <path d="M35 44 31 65h18l-4-21"></path>
+          </svg>
+        </article>
+      </section>
+
+      <section class="install-section">
+        <div>
+          <p class="section-kicker">One-line install</p>
+          <h2>Ready in under a minute.</h2>
+        </div>
+        <div class="terminal-line">
+          <span class="terminal-prompt">$</span>
+          <code>{installCommand}</code>
+          <button type="button" data-copy={installCommand} aria-label="Copy install command">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <rect x="6.5" y="6.5" width="9" height="10" rx="2"></rect>
+              <path d="M13.5 6.5v-1A2 2 0 0 0 11.5 3.5h-7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+            </svg>
+            <span>Copy</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="final-cta">
+        <img src={appIcon} alt="Mend" width="88" height="88" />
+        <h2>Stay in the sentence.</h2>
+        <p>Mend handles the detour.</p>
+        <a class="button button-primary" href={releases} target="_blank" rel="noreferrer">Download Mend</a>
+      </section>
+    </main>
+
+    <footer>
+      <a class="brand footer-brand" href="#top">
+        <img src={appIcon} alt="" width="28" height="28" />
+        <span>Mend</span>
+      </a>
+      <p>Open source and built for macOS.</p>
+      <div>
+        <a href={github} target="_blank" rel="noreferrer">GitHub</a>
+        <a href={`${github}/blob/main/LICENSE`} target="_blank" rel="noreferrer">MIT License</a>
+      </div>
+    </footer>
+
+    <script>
+      const root = document.querySelector<HTMLElement>("[data-demo]");
+      const text = root?.querySelector<HTMLElement>("[data-demo-text]");
+      const pill = root?.querySelector<HTMLElement>("[data-pill]");
+      const label = root?.querySelector<HTMLElement>("[data-pill-label]");
+      const copyButton = document.querySelector<HTMLButtonElement>("[data-copy]");
+
+      const wait = (milliseconds: number) =>
+        new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      async function runDemo() {
+        if (!root || !text || !pill || !label) return;
+        while (true) {
+          text.textContent = "I has sent the revised proposal to the team this morning.";
+          root.dataset.state = "selecting";
+          await wait(1100);
+          root.dataset.state = "fixing";
+          label.textContent = "Fixing grammar…";
+          await wait(1700);
+          text.textContent = "I sent the revised proposal to the team this morning.";
+          root.dataset.state = "fixed";
+          label.textContent = "Fixed";
+          await wait(1900);
+          root.dataset.state = "resetting";
+          await wait(700);
+        }
+      }
+
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        runDemo();
+      } else if (root && text && label) {
+        text.textContent = "I sent the revised proposal to the team this morning.";
+        label.textContent = "Fixed";
+        root.dataset.state = "fixed";
+      }
+
+      copyButton?.addEventListener("click", async () => {
+        const command = copyButton.getAttribute("data-copy");
+        if (!command) return;
+        try {
+          await navigator.clipboard.writeText(command);
+        } catch {
+          const input = document.createElement("textarea");
+          input.value = command;
+          input.style.position = "fixed";
+          input.style.opacity = "0";
+          document.body.append(input);
+          input.select();
+          document.execCommand("copy");
+          input.remove();
+        }
+        const copyLabel = copyButton.querySelector("span");
+        if (copyLabel) copyLabel.textContent = "Copied";
+        setTimeout(() => {
+          if (copyLabel) copyLabel.textContent = "Copy";
+        }, 1600);
+      });
+    </script>
+  </body>
+</html>
