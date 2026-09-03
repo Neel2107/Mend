@@ -56,10 +56,6 @@ final class AppSettings: ObservableObject {
         static let shortcut = "globalShortcut"
         static let provider = "apiProvider"
         static let showsMenuBarIcon = "showsMenuBarIcon"
-
-        static func subscriptionEnabled(_ provider: SubscriptionProvider) -> String {
-            "subscriptionProviderEnabled-\(provider.rawValue)"
-        }
     }
 
     @Published private(set) var provider: LLMProvider
@@ -69,7 +65,6 @@ final class AppSettings: ObservableObject {
     @Published var apiKey: String
     @Published var shortcut: GlobalShortcut
     @Published private(set) var showsMenuBarIcon: Bool
-    @Published private(set) var enabledSubscriptionProviders: Set<SubscriptionProvider>
 
     private var draftAPIKeys: [LLMProvider: String] = [:]
     private let readsAPIKeyFromKeychain: Bool
@@ -111,40 +106,12 @@ final class AppSettings: ObservableObject {
             shortcut = .default
         }
         showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
-        enabledSubscriptionProviders = Set(
-            SubscriptionProvider.allCases.filter { provider in
-                let key = Key.subscriptionEnabled(provider)
-                if let saved = defaults.object(forKey: key) as? Bool {
-                    return saved
-                }
-                return provider.executableURL != nil
-            }
-        )
         draftAPIKeys[savedProvider] = savedAPIKey
     }
 
     func setMenuBarIconVisible(_ isVisible: Bool) {
         showsMenuBarIcon = isVisible
         UserDefaults.standard.set(isVisible, forKey: Key.showsMenuBarIcon)
-    }
-
-    func isSubscriptionProviderEnabled(_ provider: SubscriptionProvider) -> Bool {
-        enabledSubscriptionProviders.contains(provider)
-    }
-
-    func setSubscriptionProvider(_ provider: SubscriptionProvider, enabled: Bool) {
-        if enabled {
-            enabledSubscriptionProviders.insert(provider)
-        } else {
-            enabledSubscriptionProviders.remove(provider)
-        }
-        UserDefaults.standard.set(enabled, forKey: Key.subscriptionEnabled(provider))
-    }
-
-    var availableSubscriptionConfigurations: [SubscriptionConfiguration] {
-        SubscriptionProvider.availableConfigurations.filter {
-            enabledSubscriptionProviders.contains($0.provider)
-        }
     }
 
     func selectProvider(_ newProvider: LLMProvider) {

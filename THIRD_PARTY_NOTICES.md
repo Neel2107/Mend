@@ -14,4 +14,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Provider Marks
 
-The OpenAI, Claude, and Gemini marks are the property of their respective owners. Their inclusion identifies supported providers and does not imply endorsement.
+The OpenAI and Gemini marks are the property of their respective owners. Their inclusion identifies supported providers and does not imply endorsement.

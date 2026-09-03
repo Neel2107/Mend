@@ -7,38 +7,10 @@ struct SettingsView: View {
     let onSave: @MainActor () throws -> Void
     let onMenuBarVisibilityChange: @MainActor (Bool) -> Void
     @State private var saveMessage = ""
-    @State private var providerRefreshID = UUID()
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                Section {
-                    ForEach(SubscriptionProvider.allCases) { provider in
-                        SubscriptionProviderRow(
-                            provider: provider,
-                            isEnabled: subscriptionBinding(for: provider),
-                            refreshID: providerRefreshID
-                        )
-                    }
-                } header: {
-                    HStack {
-                        Text("Providers")
-                            .font(.headline)
-                        Spacer()
-                        Button {
-                            providerRefreshID = UUID()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Refresh provider status")
-                    }
-                } footer: {
-                    Text("Enabled subscription providers are tried from top to bottom before API providers. Their existing CLI login is used; Mend never reads or stores subscription credentials.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section {
                     HStack {
                         Text("Provider")
@@ -65,7 +37,7 @@ struct SettingsView: View {
                         .buttonStyle(.bordered)
                     }
                 } header: {
-                    Text("API fallback")
+                    Text("Provider")
                         .font(.headline)
                 } footer: {
                     Text(providerHelp)
@@ -144,7 +116,7 @@ struct SettingsView: View {
             .padding(.vertical, 14)
             .background(.bar)
         }
-        .frame(minWidth: 500, minHeight: 780)
+        .frame(minWidth: 500, minHeight: 700)
     }
 
     private var messageColor: Color {
@@ -159,16 +131,6 @@ struct SettingsView: View {
             set: { provider in
                 settings.selectProvider(provider)
                 saveMessage = "Provider changed — add its API key and save to apply"
-            }
-        )
-    }
-
-    private func subscriptionBinding(for provider: SubscriptionProvider) -> Binding<Bool> {
-        Binding(
-            get: { settings.isSubscriptionProviderEnabled(provider) },
-            set: { isEnabled in
-                settings.setSubscriptionProvider(provider, enabled: isEnabled)
-                saveMessage = "Provider priority updated"
             }
         )
     }
@@ -189,73 +151,6 @@ struct SettingsView: View {
             get: { settings.showsMenuBarIcon },
             set: { onMenuBarVisibilityChange($0) }
         )
-    }
-}
-
-private struct SubscriptionProviderRow: View {
-    let provider: SubscriptionProvider
-    @Binding var isEnabled: Bool
-    let refreshID: UUID
-
-    @State private var status: SubscriptionStatus?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ProviderLogo(brand: provider.brand, size: 22)
-                .padding(.top, 2)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(provider.settingsName)
-                        .font(.body.weight(.semibold))
-                    if let version = status?.version {
-                        Text(version)
-                            .font(.system(.callout, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text(statusDescription)
-                    .font(.callout)
-                    .foregroundStyle(statusColor)
-
-                if let executionProfile = provider.executionProfile {
-                    Text(executionProfile)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer(minLength: 12)
-
-            Toggle("", isOn: $isEnabled)
-                .labelsHidden()
-                .disabled(provider.executableURL == nil)
-        }
-        .padding(.vertical, 4)
-        .task(id: refreshID) {
-            status = await provider.inspectStatus()
-        }
-    }
-
-    private var statusDescription: String {
-        guard provider.executableURL != nil else { return "Not installed" }
-        guard isEnabled else { return "Disabled" }
-        guard let status else { return "Checking authentication…" }
-
-        switch status.authentication {
-        case .subscription(let label): return "Authenticated · \(label)"
-        case .apiKey: return "API key login · subscription mode unavailable"
-        case .notAuthenticated: return "Not authenticated · run \(provider.loginCommand)"
-        case .unknown: return "Authentication could not be verified"
-        }
-    }
-
-    private var statusColor: Color {
-        guard provider.executableURL != nil, isEnabled else { return .secondary }
-        guard let status else { return .secondary }
-        if case .subscription = status.authentication { return .secondary }
-        return .orange
     }
 }
 

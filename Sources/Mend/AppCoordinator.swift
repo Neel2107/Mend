@@ -7,14 +7,14 @@ import SwiftUI
 final class AppCoordinator: NSObject {
     private enum CoordinatorError: LocalizedError {
         case shortcutUnavailable
-        case providersFailed([String], any Error)
+        case providersFailed([LLMProvider], any Error)
 
         var errorDescription: String? {
             switch self {
             case .shortcutUnavailable:
                 return "That shortcut is already being used by another app"
             case .providersFailed(let providers, let lastError):
-                let names = providers.joined(separator: " and ")
+                let names = providers.map(\.displayName).joined(separator: " and ")
                 return "\(names) failed: \(lastError.localizedDescription)"
             }
         }
@@ -43,7 +43,7 @@ final class AppCoordinator: NSObject {
         }
 
         if !isPreviewingOverlay,
-           availableRewriteProviders().isEmpty {
+           settings.availableProviderConfigurations.isEmpty {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
@@ -114,10 +114,10 @@ final class AppCoordinator: NSObject {
             return
         }
 
-        let providers = availableRewriteProviders()
-        guard !providers.isEmpty else {
+        let providerConfigurations = settings.availableProviderConfigurations
+        guard !providerConfigurations.isEmpty else {
             openSettings()
-            overlay.show(.failure("Set up a subscription or API key"), autoHideAfter: 4)
+            overlay.show(.failure("Add an API key in Settings"), autoHideAfter: 4)
             return
         }
 
@@ -128,11 +128,11 @@ final class AppCoordinator: NSObject {
                 let selection = try await selectionService.captureSelection()
                 try Task.checkCancellation()
 
-                overlay.show(.working("Fixing with \(providers[0].displayName)…"))
+                overlay.show(.working("Fixing grammar…"))
 
                 let result = try await rewrite(
                     selection.text,
-                    using: providers
+                    using: providerConfigurations
                 )
                 try Task.checkCancellation()
 
@@ -162,20 +162,20 @@ final class AppCoordinator: NSObject {
 
     private func rewrite(
         _ text: String,
-        using providers: [RewriteProvider]
+        using configurations: [ProviderConfiguration]
     ) async throws -> String {
-        var attemptedProviders: [String] = []
+        var attemptedProviders: [LLMProvider] = []
         var lastError: (any Error)?
 
-        for (index, provider) in providers.enumerated() {
+        for (index, configuration) in configurations.enumerated() {
             try Task.checkCancellation()
             if index > 0 {
-                overlay.show(.working("Trying \(provider.displayName)…"))
+                overlay.show(.working("Trying \(configuration.provider.displayName)…"))
             }
 
-            attemptedProviders.append(provider.displayName)
+            attemptedProviders.append(configuration.provider)
             do {
-                let result = try await provider.rewrite(text)
+                let result = try await LLMClient(configuration: configuration.llm).rewrite(text)
                 guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw MendError.emptyResponse
                 }
@@ -194,14 +194,6 @@ final class AppCoordinator: NSObject {
         throw CoordinatorError.providersFailed(attemptedProviders, lastError)
     }
 
-    private func availableRewriteProviders() -> [RewriteProvider] {
-        let subscriptions = settings.availableSubscriptionConfigurations.map {
-            RewriteProvider.subscription($0, prompt: settings.prompt)
-        }
-        let APIs = settings.availableProviderConfigurations.map(RewriteProvider.api)
-        return subscriptions + APIs
-    }
-
     @objc func openSettings() {
         if settingsWindow == nil {
             let view = SettingsView(
@@ -218,7 +210,7 @@ final class AppCoordinator: NSObject {
             let window = NSWindow(contentViewController: controller)
             window.title = "Mend Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 520, height: 780))
+            window.setContentSize(NSSize(width: 520, height: 700))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window

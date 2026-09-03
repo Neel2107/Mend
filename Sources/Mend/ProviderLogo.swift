@@ -3,7 +3,6 @@ import SwiftUI
 
 enum ProviderBrand: String {
     case openAI = "OpenAI"
-    case claude = "Claude"
     case gemini = "Gemini"
 }
 
