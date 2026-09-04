@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var coordinator: AppCoordinator?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        InstanceGuard.terminateOtherInstances()
         installMainMenu()
         coordinator = AppCoordinator()
         coordinator?.start()

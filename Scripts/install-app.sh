@@ -94,10 +94,13 @@ SOURCE_APP="$TEMP_DIR/Mend.app"
 [ -x "$SOURCE_APP/Contents/MacOS/Mend" ] || fail "archive does not contain Mend.app"
 /usr/bin/codesign --verify --deep --strict "$SOURCE_APP"
 
-if pgrep -qf "$DESTINATION/Contents/MacOS/Mend"; then
+# Quit every running copy, including development builds outside /Applications,
+# so the new install is the only Mend answering the shortcuts.
+if pgrep -x Mend >/dev/null; then
   echo "Closing the running copy of Mend"
-  osascript -e 'tell application "Mend" to quit' >/dev/null 2>&1 || true
+  osascript -e 'tell application id "com.mend.desktop" to quit' >/dev/null 2>&1 || true
   sleep 1
+  pkill -x Mend 2>/dev/null || true
 fi
 
 if [ ! -d "$APPS_DIR" ]; then
