@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum LLMProvider: String, CaseIterable, Identifiable {
@@ -119,6 +120,7 @@ final class AppSettings: ObservableObject {
         static let provider = "apiProvider"
         static let showsMenuBarIcon = "showsMenuBarIcon"
         static let actions = "rewriteActions"
+        static let providerDrafts = "providerDrafts"
         // Settings from before actions existed. Read once for migration.
         static let legacyPrompt = "rewritePrompt"
         static let legacyShortcut = "globalShortcut"
@@ -132,11 +134,23 @@ final class AppSettings: ObservableObject {
     @Published private(set) var showsMenuBarIcon: Bool
     @Published private(set) var launchesAtLogin: Bool
 
+    /// The endpoint and model last used with one provider, so switching
+    /// providers and back does not lose them.
+    struct ProviderDraft: Codable, Equatable {
+        var endpoint: String
+        var model: String
+    }
+
     /// Every provider's key, read from the Keychain once at launch.
     private var draftAPIKeys: [LLMProvider: String] = [:]
+    private var providerDrafts: [LLMProvider: ProviderDraft] = [:]
     private let defaults: UserDefaults
     private let keyStore: ProviderKeyStore
     private let usesKeychain: Bool
+    private var cancellables: Set<AnyCancellable> = []
+
+    /// Runs once edits settle, so changes apply without a Save button.
+    var changeHandler: (@MainActor () -> Void)?
 
     init(
         readsAPIKeyFromKeychain: Bool = true,
@@ -162,10 +176,39 @@ final class AppSettings: ObservableObject {
             model = savedModel ?? savedProvider.defaultModel ?? ""
         }
         actions = Self.loadActions(from: defaults)
+        providerDrafts = Self.loadProviderDrafts(from: defaults)
         apiKey = savedKeys[savedProvider] ?? ""
         showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
         launchesAtLogin = LoginItem.isEnabled
         draftAPIKeys = savedKeys
+        providerDrafts[savedProvider] = ProviderDraft(endpoint: endpoint, model: model)
+
+        Publishers.MergeMany(
+            $provider.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $endpoint.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $model.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $apiKey.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            $actions.dropFirst().map { _ in () }.eraseToAnyPublisher()
+        )
+        .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+        .sink { [weak self] in
+            Task { @MainActor in self?.changeHandler?() }
+        }
+        .store(in: &cancellables)
+    }
+
+    private static func loadProviderDrafts(from defaults: UserDefaults) -> [LLMProvider: ProviderDraft] {
+        guard let data = defaults.data(forKey: Key.providerDrafts),
+              let saved = try? JSONDecoder().decode([String: ProviderDraft].self, from: data) else {
+            return [:]
+        }
+        var drafts: [LLMProvider: ProviderDraft] = [:]
+        for (name, draft) in saved {
+            if let provider = LLMProvider(rawValue: name) {
+                drafts[provider] = draft
+            }
+        }
+        return drafts
     }
 
     private static func loadActions(from defaults: UserDefaults) -> [RewriteAction] {
@@ -228,14 +271,12 @@ final class AppSettings: ObservableObject {
         guard newProvider != provider else { return }
 
         draftAPIKeys[provider] = apiKey
+        providerDrafts[provider] = ProviderDraft(endpoint: endpoint, model: model)
         provider = newProvider
 
-        if let defaultEndpoint = newProvider.defaultEndpoint {
-            endpoint = defaultEndpoint
-        }
-        if let defaultModel = newProvider.defaultModel {
-            model = defaultModel
-        }
+        let draft = providerDrafts[newProvider]
+        endpoint = draft?.endpoint ?? newProvider.defaultEndpoint ?? ""
+        model = draft?.model ?? newProvider.defaultModel ?? ""
 
         apiKey = draftAPIKeys[newProvider] ?? ""
         draftAPIKeys[newProvider] = apiKey
@@ -294,6 +335,9 @@ final class AppSettings: ObservableObject {
         defaults.set(model, forKey: Key.model)
         defaults.set(provider.rawValue, forKey: Key.provider)
         defaults.set(try JSONEncoder().encode(actions), forKey: Key.actions)
+        providerDrafts[provider] = ProviderDraft(endpoint: endpoint, model: model)
+        let draftsByName = Dictionary(uniqueKeysWithValues: providerDrafts.map { ($0.key.rawValue, $0.value) })
+        defaults.set(try JSONEncoder().encode(draftsByName), forKey: Key.providerDrafts)
         draftAPIKeys[provider] = apiKey
         guard usesKeychain else { return }
         // One item holds every provider's key, including ones typed before switching back.

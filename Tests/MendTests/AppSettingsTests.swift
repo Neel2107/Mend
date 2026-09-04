@@ -116,6 +116,21 @@ struct AppSettingsTests {
         #expect(reloaded.actions.count == 1)
     }
 
+    @Test("Edits apply on their own once they settle, as one change")
+    func testEditsApplyAutomatically() async throws {
+        let settings = makeSettings(makeDefaults())
+        var applied = 0
+        settings.changeHandler = { applied += 1 }
+
+        settings.model = "a"
+        settings.model = "ab"
+        settings.endpoint = "https://example.com/v1/chat/completions"
+        #expect(applied == 0)
+
+        try await Task.sleep(nanoseconds: 700_000_000)
+        #expect(applied == 1)
+    }
+
     @Test("A custom endpoint works without a key, other providers do not")
     func testCustomEndpointWithoutKey() {
         let settings = makeSettings(makeDefaults())
@@ -145,6 +160,29 @@ struct AppSettingsTests {
         #expect(settings.apiKey == "openai-key")
         let providers = settings.availableProviderConfigurations(prompt: "p").map(\.provider)
         #expect(providers == [.openAI, .gemini])
+    }
+
+    @Test("A custom endpoint and model survive switching providers and relaunching")
+    func testProviderDraftsAreKept() throws {
+        let defaults = makeDefaults()
+        let settings = makeSettings(defaults)
+        settings.selectProvider(.custom)
+        settings.endpoint = "https://router.example/v1/chat/completions"
+        settings.model = "example/model"
+        settings.selectProvider(.gemini)
+        #expect(settings.endpoint == LLMProvider.gemini.defaultEndpoint)
+
+        settings.selectProvider(.custom)
+        #expect(settings.endpoint == "https://router.example/v1/chat/completions")
+        #expect(settings.model == "example/model")
+
+        settings.selectProvider(.gemini)
+        try settings.save()
+        let relaunched = makeSettings(defaults)
+        #expect(relaunched.provider == .gemini)
+        relaunched.selectProvider(.custom)
+        #expect(relaunched.endpoint == "https://router.example/v1/chat/completions")
+        #expect(relaunched.model == "example/model")
     }
 
     @Test("Keys live in one Keychain item and are read once at launch")

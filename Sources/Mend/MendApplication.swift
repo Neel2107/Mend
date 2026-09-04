@@ -26,6 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator?.start()
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        coordinator?.applySettings()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         coordinator?.openSettings()
         return false

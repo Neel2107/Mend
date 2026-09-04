@@ -6,13 +6,10 @@ import SwiftUI
 @MainActor
 final class AppCoordinator: NSObject, NSMenuDelegate {
     private enum CoordinatorError: LocalizedError {
-        case shortcutUnavailable(String)
         case providersFailed([LLMProvider], any Error)
 
         var errorDescription: String? {
             switch self {
-            case .shortcutUnavailable(let action):
-                return "The shortcut for “\(action)” is already in use"
             case .providersFailed(let providers, let lastError):
                 let names = providers.map(\.displayName).joined(separator: " and ")
                 return "\(names) failed: \(lastError.localizedDescription)"
@@ -38,6 +35,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
     func start() {
         let isPreviewingOverlay = CommandLine.arguments.contains("--preview-overlay")
+        settings.changeHandler = { [weak self] in self?.applySettings() }
 
         setMenuBarIconVisible(settings.showsMenuBarIcon)
 
@@ -242,12 +240,13 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
                 let replacement = try await selectionService.replaceSelection(result, in: selection)
                 timeline.mark("replace")
+                // An unverified paste almost always landed; a paste that
+                // clearly failed throws instead. The log keeps the distinction.
+                overlay.show(.success("Fixed"), autoHideAfter: 1.2)
                 switch replacement {
                 case .verified(let method):
-                    overlay.show(.success("Fixed"), autoHideAfter: 1.2)
                     await finish(timeline, warmup: warmup, outcome: "fixed via \(method.rawValue)")
                 case .unverified:
-                    overlay.show(.message("Pasted — check the result", symbol: "doc.on.clipboard.fill"), autoHideAfter: 2.5)
                     await finish(timeline, warmup: warmup, outcome: "pasted unverified")
                 }
             } catch is CancellationError {
@@ -332,19 +331,22 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         if settingsWindow == nil {
             let view = SettingsView(
                 settings: settings,
-                onSave: { [weak self] in
-                    try self?.saveSettings()
-                },
                 onMenuBarVisibilityChange: { [weak self] isVisible in
                     self?.settings.setMenuBarIconVisible(isVisible)
                     self?.setMenuBarIconVisible(isVisible)
+                },
+                onCheckForUpdates: { [weak self] in
+                    self?.checkForUpdates()
+                },
+                onError: { [weak self] error in
+                    self?.reportSettingsProblem(error.localizedDescription)
                 }
             )
             let controller = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: controller)
             window.title = "Mend Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 520, height: 700))
+            window.setContentSize(NSSize(width: 520, height: 640))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
@@ -352,13 +354,27 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
         NSApplication.shared.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+        // Do not open with the endpoint selected: a stray keystroke would
+        // replace it, and edits apply as they are made.
+        settingsWindow?.makeFirstResponder(nil)
     }
 
-    private func saveSettings() throws {
+    /// Persists the settings and re-registers shortcuts. Runs after every
+    /// edit settles and once more when the app quits.
+    func applySettings() {
         if let unavailable = registerShortcuts(for: settings.actions) {
-            throw CoordinatorError.shortcutUnavailable(unavailable.displayName)
+            reportSettingsProblem("Shortcut for “\(unavailable.displayName)” is already in use")
         }
-        try settings.save()
+        do {
+            try settings.save()
+        } catch {
+            reportSettingsProblem(error.localizedDescription)
+        }
+    }
+
+    private func reportSettingsProblem(_ message: String) {
+        overlay.anchorFrame = settingsWindow?.frame
+        overlay.show(.failure(message), autoHideAfter: 5)
     }
 
     /// Registers a hotkey for every action that has a shortcut. Returns the

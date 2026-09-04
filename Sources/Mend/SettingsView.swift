@@ -4,140 +4,100 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
-    let onSave: @MainActor () throws -> Void
     let onMenuBarVisibilityChange: @MainActor (Bool) -> Void
-    @State private var saveMessage = ""
+    let onCheckForUpdates: @MainActor () -> Void
+    let onError: @MainActor (any Error) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section {
-                    HStack {
-                        Text("Provider")
-                        Spacer(minLength: 12)
-                        APIProviderPicker(selection: providerBinding)
-                            .frame(width: 320)
-                    }
-
-                    TextField("Endpoint", text: $settings.endpoint)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Model", text: $settings.model)
-                        .textFieldStyle(.roundedBorder)
-                    HStack(spacing: 8) {
-                        SecureField("\(settings.provider.displayName) API key", text: $settings.apiKey)
-                            .textFieldStyle(.roundedBorder)
-                        Button {
-                            if let key = NSPasteboard.general.string(forType: .string) {
-                                settings.apiKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-                                saveMessage = "Key pasted — save to apply"
-                            }
-                        } label: {
-                            Label("Paste", systemImage: "doc.on.clipboard")
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                } header: {
+        Form {
+            Section {
+                HStack {
                     Text("Provider")
-                        .font(.headline)
-                } footer: {
-                    Text(providerHelp)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 12)
+                    APIProviderPicker(selection: providerBinding)
+                        .frame(width: 320)
                 }
 
-                Section {
-                    ForEach($settings.actions) { $action in
-                        ActionEditor(
-                            action: $action,
-                            canRemove: settings.actions.count > 1,
-                            onShortcutChange: { saveMessage = "Shortcut changed — save to apply" },
-                            onRemove: { settings.removeAction(id: action.id) }
-                        )
+                settingsField("Endpoint", text: $settings.endpoint)
+                settingsField("Model", text: $settings.model)
+                HStack(spacing: 8) {
+                    SecureField("\(settings.provider.displayName) API key", text: $settings.apiKey)
+                        .textFieldStyle(.roundedBorder)
+                    Button {
+                        if let key = NSPasteboard.general.string(forType: .string) {
+                            settings.apiKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                    } label: {
+                        Label("Paste", systemImage: "doc.on.clipboard")
                     }
+                    .buttonStyle(.bordered)
+                }
+            } header: {
+                Text("Provider")
+                    .font(.headline)
+            }
 
+            Section {
+                ForEach($settings.actions) { $action in
+                    ActionEditor(
+                        action: $action,
+                        canRemove: settings.actions.count > 1,
+                        onRemove: { settings.removeAction(id: action.id) }
+                    )
+                }
+
+                HStack {
                     Button {
                         settings.addAction()
                     } label: {
                         Label("Add Action", systemImage: "plus")
                     }
-                    .buttonStyle(.borderless)
-                } header: {
-                    Text("Actions")
-                        .font(.headline)
-                } footer: {
-                    Text("Each action has its own instruction and one or more shortcuts. The selected text is appended securely and treated as content rather than an instruction.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section {
-                    Toggle("Show Mend in the menu bar", isOn: menuBarVisibilityBinding)
-                    Toggle("Open Mend at login", isOn: launchAtLoginBinding)
-                } header: {
-                    Text("Controls")
-                        .font(.headline)
-                } footer: {
-                    Text("Navigation and function keys work alone; letters and numbers need a modifier. Escape cancels recording. If the icon is hidden, search for Mend in Spotlight or Raycast.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .formStyle(.grouped)
-
-            Divider()
-            HStack {
-                if !saveMessage.isEmpty {
-                    Text(saveMessage)
-                        .font(.caption)
-                        .foregroundStyle(messageColor)
-                }
-                Spacer()
-                Button("Restore Defaults") {
-                    settings.restoreDefaultActions()
-                    saveMessage = "Actions restored — save to apply"
-                }
-                Button("Save") {
-                    do {
-                        try onSave()
-                        saveMessage = "Saved"
-                    } catch {
-                        saveMessage = error.localizedDescription
+                    Spacer()
+                    Button("Restore Defaults") {
+                        settings.restoreDefaultActions()
                     }
                 }
-                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderless)
+            } header: {
+                Text("Actions")
+                    .font(.headline)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 14)
-            .background(.bar)
+
+            Section {
+                Toggle("Show Mend in the menu bar", isOn: menuBarVisibilityBinding)
+                Toggle("Open Mend at login", isOn: launchAtLoginBinding)
+                HStack {
+                    Text("Version \(UpdateChecker.currentVersion.description)")
+                    Spacer()
+                    Button("Check for Updates…", action: onCheckForUpdates)
+                }
+            } header: {
+                Text("Controls")
+                    .font(.headline)
+            }
         }
-        .frame(minWidth: 500, minHeight: 700)
+        .formStyle(.grouped)
+        .frame(minWidth: 500, minHeight: 640)
     }
 
-    private var messageColor: Color {
-        if saveMessage == "Saved" { return .green }
-        if saveMessage.contains("save to apply") { return .secondary }
-        return .red
+    /// A labeled field that keeps its label beside it however long the value is.
+    private func settingsField(_ label: String, text: Binding<String>) -> some View {
+        HStack {
+            Text(label)
+            Spacer(minLength: 12)
+            TextField(label, text: text)
+                .labelsHidden()
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.trailing)
+                .frame(maxWidth: 520)
+        }
     }
 
     private var providerBinding: Binding<LLMProvider> {
         Binding(
             get: { settings.provider },
-            set: { provider in
-                settings.selectProvider(provider)
-                saveMessage = "Provider changed — add its API key and save to apply"
-            }
+            set: { settings.selectProvider($0) }
         )
-    }
-
-    private var providerHelp: String {
-        switch settings.provider {
-        case .openAI:
-            return "Uses OpenAI's chat-completions API. Your key is stored in macOS Keychain."
-        case .gemini:
-            return "Uses Google's OpenAI-compatible Gemini endpoint. Your key is stored in macOS Keychain."
-        case .custom:
-            return "Uses an OpenAI-compatible chat-completions endpoint. Leave the key empty for local servers that do not need one."
-        }
     }
 
     private var menuBarVisibilityBinding: Binding<Bool> {
@@ -153,9 +113,8 @@ struct SettingsView: View {
             set: { isEnabled in
                 do {
                     try settings.setLaunchesAtLogin(isEnabled)
-                    saveMessage = ""
                 } catch {
-                    saveMessage = error.localizedDescription
+                    onError(error)
                 }
             }
         )
@@ -165,13 +124,12 @@ struct SettingsView: View {
 private struct ActionEditor: View {
     @Binding var action: RewriteAction
     let canRemove: Bool
-    let onShortcutChange: () -> Void
     let onRemove: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                TextField("Name, shown in the capsule while it runs", text: $action.name)
+                TextField("Name", text: $action.name)
                     .textFieldStyle(.roundedBorder)
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "minus.circle")
@@ -183,9 +141,9 @@ private struct ActionEditor: View {
 
             HStack(spacing: 6) {
                 ForEach(action.shortcuts, id: \.self) { shortcut in
-                    ShortcutRecorder(shortcut: binding(for: shortcut), onChange: onShortcutChange)
+                    ShortcutRecorder(shortcut: binding(for: shortcut))
                 }
-                ShortcutRecorder(shortcut: newShortcutBinding, placeholder: "Add Shortcut", onChange: onShortcutChange)
+                ShortcutRecorder(shortcut: newShortcutBinding, placeholder: "Add Shortcut")
             }
 
             TextEditor(text: $action.prompt)
@@ -274,7 +232,6 @@ private struct APIProviderPicker: View {
 private struct ShortcutRecorder: View {
     @Binding var shortcut: GlobalShortcut?
     var placeholder = "Record Shortcut"
-    let onChange: () -> Void
 
     @State private var isRecording = false
     @State private var eventMonitor: Any?
@@ -293,7 +250,6 @@ private struct ShortcutRecorder: View {
             if shortcut != nil {
                 Button {
                     shortcut = nil
-                    onChange()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
@@ -327,7 +283,6 @@ private struct ShortcutRecorder: View {
             }
 
             shortcut = newShortcut
-            onChange()
             stopRecording()
             return nil
         }
