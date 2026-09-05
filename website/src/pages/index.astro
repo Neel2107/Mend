@@ -38,7 +38,7 @@ const terminalLines = [
     <title>Mend — write first, mend the rest</title>
   </head>
   <body>
-    <a class="skip" href="#story">Skip to content</a>
+    <a class="skip" href="#top">Skip to content</a>
 
     <header class="menubar">
       <div class="menubar-inner">
@@ -183,9 +183,10 @@ const terminalLines = [
 
           <section class="chapter try" id="try" data-scene="try">
             <h2>Now you.</h2>
-            <p class="body">
-              Select a sentence in the draft and press <kbd>⌃</kbd><kbd>⌥</kbd><kbd>G</kbd>.
+            <p class="body only-pointer">
+              Select a sentence in the draft and press <span class="keys"><kbd>⌃</kbd><kbd>⌥</kbd><kbd>G</kbd></span>.
             </p>
+            <p class="body only-touch">Tap the button to mend one sentence at a time.</p>
             <div class="try-actions">
               <button class="button button-secondary" type="button" data-try-next>Mend the next sentence</button>
               <span class="try-status" data-try-status></span>

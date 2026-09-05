@@ -93,6 +93,14 @@ kbd + kbd {
   margin-left: 3px;
 }
 
+.keys {
+  white-space: nowrap;
+}
+
+.only-touch {
+  display: none;
+}
+
 .skip {
   position: absolute;
   top: -60px;
@@ -920,46 +928,89 @@ footer {
     display: none;
   }
 
+  /* Headline first, then the screen, which pins under the menu bar while the chapters drive it. */
   .split {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
 
-  .screen-col {
+  .story {
+    display: contents;
+  }
+
+  .hero {
     order: 0;
+    padding-top: 36px;
+  }
+
+  .screen-col {
+    order: 1;
     z-index: 20;
     top: var(--menubar);
-    padding: 12px 0 10px;
+    padding: 10px 0;
     background: var(--desktop);
+  }
+
+  .chapter:not(.hero) {
+    order: 2;
+  }
+
+  .hero + .chapter {
+    border-top: 0;
   }
 
   .screen {
     --stage-w: 400;
-    --stage-h: 380;
+    --stage-h: 225;
+    max-width: 520px;
     border-radius: 16px;
   }
 
   .win {
-    left: 16px;
-    width: 368px;
+    left: 12px;
+    width: 376px;
+    border-radius: 10px;
   }
 
+  .titlebar {
+    height: 34px;
+    padding: 0 12px;
+  }
+
+  .titlebar .title {
+    font-size: 11.5px;
+  }
+
+  .lights i {
+    width: 10px;
+    height: 10px;
+  }
+
+  /* The notes window sits on the bottom edge of the stage, like a window that runs off screen. */
   .win-notes {
-    top: 28px;
+    top: 12px;
+    bottom: -24px;
   }
 
   .notes-body {
-    padding: 18px 20px 22px;
-    font-size: 16.5px;
+    padding: 12px 16px 14px;
+    font-size: 14.5px;
+    line-height: 1.5;
   }
 
   .notes-heading {
-    font-size: 18px;
+    margin-bottom: 6px;
+    font-size: 16px;
   }
 
+  .notes-sign {
+    display: none;
+  }
+
+  /* The settings window is taller than the stage; each scene scrolls its group into view. */
   .win-settings {
-    top: 10px;
-    height: 360px;
+    top: 12px;
+    height: 320px;
   }
 
   .form {
@@ -970,6 +1021,15 @@ footer {
   .group {
     gap: 5px;
     padding: 7px 9px;
+    transition: box-shadow 320ms ease, opacity 320ms ease, transform 480ms var(--ease);
+  }
+
+  .screen[data-scene="key"] .group {
+    transform: translateY(-70px);
+  }
+
+  .screen[data-scene="instruction"] .group {
+    transform: translateY(-150px);
   }
 
   .field-area {
@@ -986,20 +1046,25 @@ footer {
   }
 
   .win-terminal {
-    top: 60px;
+    top: 18px;
+    height: 172px;
   }
 
   .terminal-lines {
+    padding: 12px 14px;
     font-size: 11px;
   }
 
-  .story {
-    padding-top: 12px;
+  .pill {
+    right: 12px;
+    bottom: 12px;
+    height: 38px;
+    font-size: 12.5px;
   }
 
   .chapter {
     min-height: 0;
-    padding: 44px 0;
+    padding: 40px 0;
   }
 
   .step,
@@ -1008,23 +1073,105 @@ footer {
   }
 
   .step {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 28px 0;
+    gap: 14px;
+    padding: 24px 0;
   }
 
-  .install-inline code {
-    max-width: 200px;
+  .step p {
+    padding-top: 2px;
+  }
+
+  .actions {
+    margin-top: 24px;
+  }
+
+  /* Install command: one line sized to the box, copy control underneath. */
+  .install-inline,
+  .command {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 6px;
+    align-items: center;
+    container-type: inline-size;
+  }
+
+  .install-inline .prompt,
+  .command .prompt,
+  .install-inline code,
+  .command code {
+    font-size: clamp(10px, calc(100cqw / 31), 13px);
+  }
+
+  .install-inline code,
+  .command code {
+    overflow-x: auto;
+    line-height: 1.6;
+    text-overflow: clip;
+    scrollbar-width: none;
+  }
+
+  .install-inline code::-webkit-scrollbar,
+  .command code::-webkit-scrollbar {
+    display: none;
+  }
+
+  .install-inline {
+    width: 100%;
+    padding: 12px 12px 10px 14px;
+  }
+
+  .copy-label {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .command {
+    padding: 12px 10px 10px 16px;
+  }
+
+  .command .button {
+    grid-column: 2;
+    justify-self: end;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 13px;
+  }
+
+  footer {
+    margin-top: 24px;
+    padding: 16px 0 calc(28px + env(safe-area-inset-bottom));
   }
 
   .footer-inner {
     flex-wrap: wrap;
-    gap: 12px;
+    justify-content: space-between;
+    gap: 4px 16px;
+    min-height: 44px;
   }
 
   .footer-inner nav {
-    width: 100%;
-    margin-left: 0;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .footer-inner nav a {
+    padding: 12px 7px;
+  }
+
+  .footer-inner nav a:last-child {
+    padding-right: 0;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .only-pointer {
+    display: none;
+  }
+
+  .only-touch {
+    display: block;
   }
 }
 
