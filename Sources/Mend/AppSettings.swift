@@ -215,10 +215,12 @@ final class AppSettings: ObservableObject {
         if let data = defaults.data(forKey: Key.actions),
            let saved = try? JSONDecoder().decode([RewriteAction].self, from: data),
            !saved.isEmpty {
-            // Earlier builds named new actions "New action" and showed that in the capsule.
+            // Earlier builds named new actions "New action" and showed that in
+            // the capsule, and let ⌘C or ⌘V be recorded as a shortcut.
             return saved.map { action in
                 var action = action
                 if action.name == "New action" { action.name = "" }
+                action.shortcuts.removeAll(where: \.isReservedForMend)
                 return action
             }
         }
@@ -251,6 +253,54 @@ final class AppSettings: ObservableObject {
 
     func action(id: UUID) -> RewriteAction? {
         actions.first { $0.id == id }
+    }
+
+    /// Whether any action already responds to `shortcut`.
+    func isShortcutTaken(_ shortcut: GlobalShortcut) -> Bool {
+        actions.contains { $0.shortcuts.contains(shortcut) }
+    }
+
+    /// Adds, replaces or removes one shortcut on an action. A shortcut can
+    /// belong to only one action, so a combination already in use anywhere
+    /// is refused and the caller gets `false`. Passing nil removes `old`.
+    @discardableResult
+    func setShortcut(_ new: GlobalShortcut?, replacing old: GlobalShortcut?, in actionID: UUID) -> Bool {
+        guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return false }
+        var shortcuts = actions[index].shortcuts
+
+        if let new, new.isReservedForMend { return false }
+        if let new, new != old, isShortcutTaken(new) { return false }
+
+        if let old, let position = shortcuts.firstIndex(of: old) {
+            if let new {
+                shortcuts[position] = new
+            } else {
+                shortcuts.remove(at: position)
+            }
+        } else if let new {
+            shortcuts.append(new)
+        }
+
+        if shortcuts != actions[index].shortcuts {
+            actions[index].shortcuts = shortcuts
+        }
+        return true
+    }
+
+    /// Why running `action` would fail right now, or nil when it can run.
+    /// Each message names the one thing to fix in Settings.
+    func setupProblem(for action: RewriteAction) -> String? {
+        if action.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Add a prompt for “\(action.displayName)” in Settings"
+        }
+        guard availableProviderConfigurations(prompt: action.prompt).isEmpty else { return nil }
+        if endpoint.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Add an endpoint in Settings"
+        }
+        if model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Add a model in Settings"
+        }
+        return "Add an API key in Settings"
     }
 
     // MARK: Menu bar and login
@@ -315,7 +365,7 @@ final class AppSettings: ObservableObject {
             )
             // Local servers behind a custom endpoint often need no key.
             let hasCredentials = !configuration.apiKey.isEmpty || candidate == .custom
-            guard hasCredentials, !configuration.endpoint.isEmpty else { return nil }
+            guard hasCredentials, !configuration.endpoint.isEmpty, !configuration.model.isEmpty else { return nil }
             return ProviderConfiguration(provider: candidate, llm: configuration)
         }
     }

@@ -42,7 +42,8 @@ struct SettingsView: View {
                     ActionEditor(
                         action: $action,
                         canRemove: settings.actions.count > 1,
-                        onRemove: { settings.removeAction(id: action.id) }
+                        onRemove: { settings.removeAction(id: action.id) },
+                        onSetShortcut: { new, old in settings.setShortcut(new, replacing: old, in: action.id) }
                     )
                 }
 
@@ -125,6 +126,8 @@ private struct ActionEditor: View {
     @Binding var action: RewriteAction
     let canRemove: Bool
     let onRemove: () -> Void
+    /// Applies one shortcut change; false means the combination is taken.
+    let onSetShortcut: (_ new: GlobalShortcut?, _ old: GlobalShortcut?) -> Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -139,16 +142,17 @@ private struct ActionEditor: View {
                 .help("Remove this action")
             }
 
-            HStack(spacing: 6) {
+            // Wraps so any number of shortcuts fits the window's width.
+            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
                 ForEach(action.shortcuts, id: \.self) { shortcut in
-                    ShortcutRecorder(shortcut: binding(for: shortcut))
+                    ShortcutRecorder(shortcut: shortcut) { onSetShortcut($0, shortcut) }
                 }
-                ShortcutRecorder(shortcut: newShortcutBinding, placeholder: "Add Shortcut")
+                ShortcutRecorder(shortcut: nil, placeholder: "Add Shortcut") { onSetShortcut($0, nil) }
             }
 
             TextEditor(text: $action.prompt)
                 .font(.system(size: 13))
-                .frame(minHeight: 96)
+                .frame(minHeight: 96, maxHeight: 240)
                 .padding(6)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
                 .overlay {
@@ -158,29 +162,59 @@ private struct ActionEditor: View {
         }
         .padding(.vertical, 4)
     }
+}
 
-    /// Edits one existing shortcut in place; clearing it removes it.
-    private func binding(for shortcut: GlobalShortcut) -> Binding<GlobalShortcut?> {
-        Binding(
-            get: { shortcut },
-            set: { replacement in
-                guard let index = action.shortcuts.firstIndex(of: shortcut) else { return }
-                if let replacement {
-                    action.shortcuts[index] = replacement
-                } else {
-                    action.shortcuts.remove(at: index)
-                }
-            }
-        )
+/// Lays children out left to right and starts a new row when one would not fit.
+private struct FlowLayout: Layout {
+    var horizontalSpacing: CGFloat
+    var verticalSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + verticalSpacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: proposal.width ?? width, height: height)
     }
 
-    private var newShortcutBinding: Binding<GlobalShortcut?> {
-        Binding(
-            get: { nil },
-            set: { recorded in
-                if let recorded { action.addShortcut(recorded) }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for (index, size) in zip(row.indices, row.sizes) {
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                    proposal: ProposedViewSize(size)
+                )
+                x += size.width + horizontalSpacing
             }
-        )
+            y += row.height + verticalSpacing
+        }
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var sizes: [CGSize] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            let needed = row.indices.isEmpty ? size.width : row.width + horizontalSpacing + size.width
+            if !row.indices.isEmpty, needed > width {
+                rows.append(row)
+                row = Row()
+            }
+            row.indices.append(index)
+            row.sizes.append(size)
+            row.width = row.indices.count == 1 ? size.width : row.width + horizontalSpacing + size.width
+            row.height = max(row.height, size.height)
+        }
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
     }
 }
 
@@ -230,11 +264,14 @@ private struct APIProviderPicker: View {
 }
 
 private struct ShortcutRecorder: View {
-    @Binding var shortcut: GlobalShortcut?
+    let shortcut: GlobalShortcut?
     var placeholder = "Record Shortcut"
+    /// Receives the recorded shortcut, or nil to clear. False means it was refused.
+    let onChange: (GlobalShortcut?) -> Bool
 
     @State private var isRecording = false
     @State private var eventMonitor: Any?
+    @State private var focusObserver: (any NSObjectProtocol)?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -249,7 +286,7 @@ private struct ShortcutRecorder: View {
 
             if shortcut != nil {
                 Button {
-                    shortcut = nil
+                    _ = onChange(nil)
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
@@ -271,20 +308,32 @@ private struct ShortcutRecorder: View {
     private func beginRecording() {
         stopRecording()
         isRecording = true
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        // A click anywhere, including on another recorder, ends this one so
+        // two chips never listen at once; so does the window losing focus.
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
+            guard event.type == .keyDown else {
+                stopRecording()
+                return event
+            }
             if event.keyCode == UInt16(kVK_Escape) {
                 stopRecording()
                 return nil
             }
 
-            guard let newShortcut = GlobalShortcut(event: event) else {
+            guard let newShortcut = GlobalShortcut(event: event), onChange(newShortcut) else {
                 NSSound.beep()
                 return nil
             }
 
-            shortcut = newShortcut
             stopRecording()
             return nil
+        }
+        focusObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            stopRecording()
         }
     }
 
@@ -292,6 +341,10 @@ private struct ShortcutRecorder: View {
         if let eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
             self.eventMonitor = nil
+        }
+        if let focusObserver {
+            NotificationCenter.default.removeObserver(focusObserver)
+            self.focusObserver = nil
         }
         isRecording = false
     }

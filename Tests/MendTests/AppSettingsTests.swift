@@ -95,6 +95,83 @@ struct AppSettingsTests {
         #expect(reloaded.actions[0].shortcuts == [.default, second])
     }
 
+    @Test("A shortcut belongs to one action; duplicates are refused, edits and removals apply")
+    func testShortcutOwnership() {
+        let settings = makeSettings(makeDefaults())
+        settings.addAction()
+        let first = settings.actions[0].id
+        let second = settings.actions[1].id
+        let f5 = GlobalShortcut(keyCode: UInt32(kVK_F5), modifiers: 0, keyLabel: "F5")
+        let f6 = GlobalShortcut(keyCode: UInt32(kVK_F6), modifiers: 0, keyLabel: "F6")
+
+        // Adding the default shortcut to another action, or again to its own, is refused.
+        #expect(settings.setShortcut(.default, replacing: nil, in: second) == false)
+        #expect(settings.setShortcut(.default, replacing: nil, in: first) == false)
+        #expect(settings.actions[1].shortcuts.isEmpty)
+
+        #expect(settings.setShortcut(f5, replacing: nil, in: second))
+        #expect(settings.isShortcutTaken(f5))
+
+        // Re-recording a chip as itself is fine; as another action's shortcut it is not.
+        #expect(settings.setShortcut(f5, replacing: f5, in: second))
+        #expect(settings.setShortcut(.default, replacing: f5, in: second) == false)
+        #expect(settings.actions[1].shortcuts == [f5])
+
+        #expect(settings.setShortcut(f6, replacing: f5, in: second))
+        #expect(settings.actions[1].shortcuts == [f6])
+        #expect(settings.setShortcut(nil, replacing: f6, in: second))
+        #expect(settings.actions[1].shortcuts.isEmpty)
+        #expect(settings.setShortcut(f6, replacing: nil, in: UUID()) == false)
+    }
+
+    @Test("⌘C and ⌘V cannot be shortcuts, and saved ones are dropped")
+    func testReservedShortcuts() throws {
+        let defaults = makeDefaults()
+        let settings = makeSettings(defaults)
+        let copy = GlobalShortcut(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey), keyLabel: "C")
+        let paste = GlobalShortcut(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(cmdKey), keyLabel: "V")
+        let shiftCopy = GlobalShortcut(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey | shiftKey), keyLabel: "C")
+        let id = settings.actions[0].id
+
+        #expect(settings.setShortcut(copy, replacing: nil, in: id) == false)
+        #expect(settings.setShortcut(paste, replacing: nil, in: id) == false)
+        #expect(settings.setShortcut(shiftCopy, replacing: nil, in: id))
+        #expect(settings.actions[0].shortcuts == [.default, shiftCopy])
+
+        // A ⌘C saved by an earlier build disappears on load.
+        settings.actions[0].shortcuts.append(copy)
+        try settings.save()
+        let reloaded = makeSettings(defaults)
+        #expect(reloaded.actions[0].shortcuts == [.default, shiftCopy])
+    }
+
+    @Test("Running an action reports the one missing setting")
+    func testSetupProblems() {
+        let settings = makeSettings(makeDefaults())
+        var action = settings.actions[0]
+        #expect(settings.setupProblem(for: action) == "Add an API key in Settings")
+
+        settings.apiKey = "sk-test"
+        #expect(settings.setupProblem(for: action) == nil)
+
+        settings.model = " "
+        #expect(settings.setupProblem(for: action) == "Add a model in Settings")
+        settings.model = "gpt-4.1-mini"
+
+        action.prompt = "\n  "
+        #expect(settings.setupProblem(for: action) == "Add a prompt for “Fix grammar” in Settings")
+        action.prompt = "Shorten."
+
+        // With no other provider to fall back to, a custom endpoint must be complete.
+        settings.apiKey = ""
+        settings.selectProvider(.custom)
+        #expect(settings.setupProblem(for: action) == "Add an endpoint in Settings")
+        settings.endpoint = "http://localhost:11434/v1/chat/completions"
+        #expect(settings.setupProblem(for: action) == "Add a model in Settings")
+        settings.model = "llama"
+        #expect(settings.setupProblem(for: action) == nil)
+    }
+
     @Test("Actions round-trip through save and the last one cannot be removed")
     func testActionsPersist() throws {
         let defaults = makeDefaults()

@@ -39,8 +39,8 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
         setMenuBarIconVisible(settings.showsMenuBarIcon)
 
-        if let unavailable = registerShortcuts(for: settings.actions) {
-            overlay.show(.failure("Shortcut for “\(unavailable.displayName)” unavailable"), autoHideAfter: 5)
+        if let problem = registerShortcuts(for: settings.actions) {
+            overlay.show(.failure(problem), autoHideAfter: 5)
         }
 
         if !isPreviewingOverlay,
@@ -198,12 +198,12 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             return
         }
 
-        let providerConfigurations = settings.availableProviderConfigurations(prompt: action.prompt)
-        guard !providerConfigurations.isEmpty else {
+        if let problem = settings.setupProblem(for: action) {
             openSettings()
-            overlay.show(.failure("Add an API key in Settings"), autoHideAfter: 4)
+            overlay.show(.failure(problem), autoHideAfter: 4)
             return
         }
+        let providerConfigurations = settings.availableProviderConfigurations(prompt: action.prompt)
 
         activeTask = Task { [weak self] in
             guard let self else { return }
@@ -362,8 +362,8 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     /// Persists the settings and re-registers shortcuts. Runs after every
     /// edit settles and once more when the app quits.
     func applySettings() {
-        if let unavailable = registerShortcuts(for: settings.actions) {
-            reportSettingsProblem("Shortcut for “\(unavailable.displayName)” is already in use")
+        if let problem = registerShortcuts(for: settings.actions) {
+            reportSettingsProblem(problem)
         }
         do {
             try settings.save()
@@ -377,41 +377,37 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         overlay.show(.failure(message), autoHideAfter: 5)
     }
 
-    /// Registers a hotkey for every action that has a shortcut. Returns the
-    /// first action whose shortcut could not be registered, after restoring
-    /// the previous set so the user keeps working shortcuts.
-    @discardableResult
-    private func registerShortcuts(for actions: [RewriteAction]) -> RewriteAction? {
-        if actions == registeredActions, hotKeys.count == actions.reduce(0, { $0 + $1.shortcuts.count }) {
-            return nil
-        }
+    /// Registers a hotkey for every shortcut of every action. A shortcut that
+    /// cannot be registered, because another app or an older duplicate holds
+    /// it, is skipped so the rest keep working; the message names it.
+    private func registerShortcuts(for actions: [RewriteAction]) -> String? {
+        if actions == registeredActions { return nil }
 
-        let previousActions = registeredActions
         hotKeys = []
-        registeredActions = []
-
-        if let unavailable = installHotKeys(for: actions) {
-            hotKeys = []
-            installHotKeys(for: previousActions)
-            registeredActions = previousActions
-            return unavailable
-        }
-
-        registeredActions = actions
-        return nil
-    }
-
-    @discardableResult
-    private func installHotKeys(for actions: [RewriteAction]) -> RewriteAction? {
+        var unavailable: [(action: RewriteAction, shortcut: GlobalShortcut)] = []
         for action in actions {
             for shortcut in action.shortcuts {
-                guard let hotKey = makeHotKey(for: shortcut, actionID: action.id) else {
-                    return action
+                if let hotKey = makeHotKey(for: shortcut, actionID: action.id) {
+                    hotKeys.append(hotKey)
+                } else {
+                    unavailable.append((action, shortcut))
                 }
-                hotKeys.append(hotKey)
             }
         }
-        return nil
+
+        // Leave the set unremembered while something failed, so the next
+        // edit retries the shortcut instead of assuming it is registered.
+        registeredActions = unavailable.isEmpty ? actions : []
+
+        switch unavailable.count {
+        case 0:
+            return nil
+        case 1:
+            let (action, shortcut) = unavailable[0]
+            return "\(shortcut.displayString) for “\(action.displayName)” is already in use"
+        default:
+            return "\(unavailable.count) shortcuts are already in use"
+        }
     }
 
     private func makeHotKey(for shortcut: GlobalShortcut, actionID: UUID) -> HotKeyManager? {

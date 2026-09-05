@@ -64,6 +64,21 @@ jobs:
             ${{ steps.app_archive.outputs.archive_path }}
             dist/SHA256SUMS
 
+      - name: Collect release notes
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          # The section for this version in CHANGELOG.md, without its heading.
+          awk -v v="$version" '
+            /^## / { printing = ($2 == v) ; next }
+            printing { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > dist/RELEASE_NOTES.md
+          if [[ ! -s dist/RELEASE_NOTES.md ]]; then
+            echo "CHANGELOG.md has no section for $version" >&2
+            exit 1
+          fi
+          cat dist/RELEASE_NOTES.md
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,5 +87,5 @@ jobs:
             "${{ steps.app_archive.outputs.archive_path }}" \
             dist/SHA256SUMS \
             --title "Mend ${GITHUB_REF_NAME#v}" \
-            --generate-notes \
+            --notes-file dist/RELEASE_NOTES.md \
             --verify-tag

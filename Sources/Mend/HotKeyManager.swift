@@ -13,6 +13,14 @@ struct GlobalShortcut: Codable, Hashable {
         keyLabel: "G"
     )
 
+    /// Plain ⌘C and ⌘V cannot be shortcuts: Mend sends them itself to copy
+    /// the selection and paste the result, and a hotkey on either would
+    /// swallow that keystroke and cancel the run in progress.
+    var isReservedForMend: Bool {
+        modifiers == UInt32(cmdKey)
+            && (keyCode == UInt32(kVK_ANSI_C) || keyCode == UInt32(kVK_ANSI_V))
+    }
+
     var displayString: String {
         var value = ""
         if modifiers & UInt32(controlKey) != 0 { value += "⌃" }
@@ -130,8 +138,11 @@ struct GlobalShortcut: Codable, Hashable {
     }
 }
 
-private let mendHotKeyHandler: EventHandlerUPP = { _, event, userData in
-    guard let event, let userData else { return noErr }
+/// One Carbon handler serves every hotkey. Carbon treats `noErr` as "handled,
+/// stop here", so a handler per hotkey would swallow presses meant for the
+/// others; a single handler that dispatches by id avoids that entirely.
+private let mendHotKeyHandler: EventHandlerUPP = { _, event, _ in
+    guard let event else { return OSStatus(eventNotHandledErr) }
 
     var hotKeyID = EventHotKeyID()
     let status = GetEventParameter(
@@ -145,24 +156,23 @@ private let mendHotKeyHandler: EventHandlerUPP = { _, event, userData in
     )
 
     guard status == noErr, hotKeyID.signature == HotKeyManager.signature else {
-        return status
+        return OSStatus(eventNotHandledErr)
     }
 
-    // Every manager installs a handler, so each one only answers its own id.
-    let manager = Unmanaged<HotKeyManager>.fromOpaque(userData).takeUnretainedValue()
-    guard hotKeyID.id == manager.id else { return noErr }
-    manager.invoke()
-    return noErr
+    return HotKeyManager.dispatch(id: hotKeyID.id) ? noErr : OSStatus(eventNotHandledErr)
 }
 
 final class HotKeyManager {
     static let signature: OSType = 0x4D454E44 // MEND
 
     private static var nextID: UInt32 = 1
+    /// Weak so the registry never keeps a manager alive; deinit removes the entry.
+    private struct WeakManager { weak var manager: HotKeyManager? }
+    private static var registry: [UInt32: WeakManager] = [:]
+    private static var sharedHandlerRef: EventHandlerRef?
 
     let id: UInt32
     private var hotKeyRef: EventHotKeyRef?
-    private var eventHandlerRef: EventHandlerRef?
     private let action: () -> Void
 
     init?(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) {
@@ -170,21 +180,7 @@ final class HotKeyManager {
         id = Self.nextID
         Self.nextID += 1
 
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-
-        let handlerStatus = InstallEventHandler(
-            GetApplicationEventTarget(),
-            mendHotKeyHandler,
-            1,
-            &eventType,
-            Unmanaged.passUnretained(self).toOpaque(),
-            &eventHandlerRef
-        )
-
-        guard handlerStatus == noErr else { return nil }
+        guard Self.installSharedHandlerIfNeeded() else { return nil }
 
         let identifier = EventHotKeyID(signature: Self.signature, id: id)
         let registrationStatus = RegisterEventHotKey(
@@ -197,17 +193,47 @@ final class HotKeyManager {
         )
 
         guard registrationStatus == noErr else {
-            if let eventHandlerRef { RemoveEventHandler(eventHandlerRef) }
+            Self.removeSharedHandlerIfUnused()
             return nil
         }
+
+        Self.registry[id] = WeakManager(manager: self)
     }
 
     deinit {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
-        if let eventHandlerRef { RemoveEventHandler(eventHandlerRef) }
+        Self.registry[id] = nil
+        Self.removeSharedHandlerIfUnused()
     }
 
-    fileprivate func invoke() {
-        action()
+    /// Runs the action for `id`. Returns false when no live manager owns it.
+    fileprivate static func dispatch(id: UInt32) -> Bool {
+        guard let manager = registry[id]?.manager else { return false }
+        manager.action()
+        return true
+    }
+
+    private static func installSharedHandlerIfNeeded() -> Bool {
+        if sharedHandlerRef != nil { return true }
+
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let status = InstallEventHandler(
+            GetApplicationEventTarget(),
+            mendHotKeyHandler,
+            1,
+            &eventType,
+            nil,
+            &sharedHandlerRef
+        )
+        return status == noErr
+    }
+
+    private static func removeSharedHandlerIfUnused() {
+        guard registry.isEmpty, let handler = sharedHandlerRef else { return }
+        RemoveEventHandler(handler)
+        sharedHandlerRef = nil
     }
 }
