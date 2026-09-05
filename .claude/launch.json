@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "website",
+      "url": "http://127.0.0.1:4321"
+    }
+  ]
+}
