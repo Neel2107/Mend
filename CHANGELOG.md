@@ -2,7 +2,7 @@
 
 Each release publishes its section here as the GitHub release notes.
 
-## Unreleased
+## 0.3.4 — 2026-09-05
 
 - Every shortcut works. Before, only the most recently added shortcut across all actions responded.
 - Shortcuts wrap onto new rows in Settings instead of pushing the window wider than the screen.
