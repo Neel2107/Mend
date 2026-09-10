@@ -2,7 +2,7 @@
 
 Each release publishes its section here as the GitHub release notes.
 
-## Unreleased
+## 0.3.5 — 2026-09-10
 
 - The status capsule is Liquid Glass on macOS 26, so it no longer sits as a flat grey slab over light windows. Earlier systems keep the previous material.
 
