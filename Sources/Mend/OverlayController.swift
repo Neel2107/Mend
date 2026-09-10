@@ -282,7 +282,7 @@ private struct OverlayView: View {
         }
         .padding(.horizontal, OverlayDesign.horizontalPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThickMaterial, in: Capsule())
+        .modifier(CapsuleSurface())
         .animation(
             .easeInOut(duration: OverlayDesign.contentTransitionDuration),
             value: model.state
@@ -313,6 +313,19 @@ private struct OverlayView: View {
         switch model.state {
         case .working(let text), .success(let text), .failure(let text), .message(let text, _):
             return text
+        }
+    }
+}
+
+/// Liquid Glass on macOS 26 and later, so the capsule refracts whatever is
+/// behind it instead of sitting as a flat grey slab over light windows.
+/// Earlier systems keep the thick material.
+private struct CapsuleSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *) {
+            content.glassEffect(.regular, in: Capsule())
+        } else {
+            content.background(.ultraThickMaterial, in: Capsule())
         }
     }
 }

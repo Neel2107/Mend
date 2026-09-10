@@ -2,6 +2,10 @@
 
 Each release publishes its section here as the GitHub release notes.
 
+## Unreleased
+
+- The status capsule is Liquid Glass on macOS 26, so it no longer sits as a flat grey slab over light windows. Earlier systems keep the previous material.
+
 ## 0.3.4 — 2026-09-05
 
 - Every shortcut works. Before, only the most recently added shortcut across all actions responded.
