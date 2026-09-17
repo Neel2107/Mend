@@ -47,26 +47,40 @@ struct DiffResult: Equatable {
 
 /// Computes token-level differences using Longest Common Subsequence (LCS).
 enum DiffEngine {
+    private enum TokenCategory {
+        case whitespace
+        case word
+        case punctuation
+    }
+
     /// Splits text into tokens (words, punctuation, and whitespace runs).
     static func tokenize(_ text: String) -> [String] {
         guard !text.isEmpty else { return [] }
         var tokens: [String] = []
         var current = ""
-        var inWhitespace: Bool?
+        var currentCategory: TokenCategory?
 
         for scalar in text.unicodeScalars {
-            let isSpace = CharacterSet.whitespacesAndNewlines.contains(scalar)
-            if let wasSpace = inWhitespace {
-                if wasSpace == isSpace {
+            let category: TokenCategory
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                category = .whitespace
+            } else if CharacterSet.alphanumerics.contains(scalar) {
+                category = .word
+            } else {
+                category = .punctuation
+            }
+
+            if let prev = currentCategory {
+                if prev == category && category != .punctuation {
                     current.unicodeScalars.append(scalar)
                 } else {
                     tokens.append(current)
                     current = String(scalar)
-                    inWhitespace = isSpace
+                    currentCategory = category
                 }
             } else {
                 current.unicodeScalars.append(scalar)
-                inWhitespace = isSpace
+                currentCategory = category
             }
         }
         if !current.isEmpty {
