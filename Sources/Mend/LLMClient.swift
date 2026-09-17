@@ -1,31 +1,46 @@
 import Foundation
 
-struct LLMConfiguration {
-    let endpoint: String
-    let model: String
-    let prompt: String
-    let apiKey: String
+public struct LLMConfiguration: Equatable {
+    public let endpoint: String
+    public let model: String
+    public let prompt: String
+    public let apiKey: String
+
+    public init(endpoint: String, model: String, prompt: String, apiKey: String) {
+        self.endpoint = endpoint
+        self.model = model
+        self.prompt = prompt
+        self.apiKey = apiKey
+    }
 }
 
-struct ProviderConfiguration {
-    let provider: LLMProvider
-    let llm: LLMConfiguration
+public struct ProviderConfiguration {
+    public let provider: LLMProvider
+    public let llm: LLMConfiguration
+
+    public init(provider: LLMProvider, llm: LLMConfiguration) {
+        self.provider = provider
+        self.llm = llm
+    }
 }
 
-struct LLMClient {
-    let configuration: LLMConfiguration
-    var session: URLSession = .shared
+public struct LLMClient {
+    public let configuration: LLMConfiguration
+    public var session: URLSession = .shared
 
     /// Corrections should be repeatable, so requests ask for a deterministic
     /// sample. Models that only accept their default temperature reject the
     /// parameter, and those requests are retried without it.
-    static let temperature: Double = 0
+    public static let temperature: Double = 0
+
+    public init(configuration: LLMConfiguration, session: URLSession = .shared) {
+        self.configuration = configuration
+        self.session = session
+    }
 
     /// Opens a connection to the provider ahead of the request, so DNS, TCP,
-    /// and TLS happen while the selection is still being read. The response
-    /// is ignored; only the pooled connection matters. Returns how long the
-    /// warm-up took, or nil if it failed or was cancelled.
-    func preconnect() -> Task<Duration?, Never> {
+    /// and TLS happen while the selection is still being read.
+    public func preconnect() -> Task<Duration?, Never> {
         Task.detached(priority: .userInitiated) { [session, configuration] in
             guard let endpoint = URL(string: configuration.endpoint),
                   let origin = URL(string: "/", relativeTo: endpoint) else { return nil }
@@ -39,7 +54,8 @@ struct LLMClient {
         }
     }
 
-    func rewrite(_ text: String) async throws -> String {
+    /// Rewrites the text in a single non-streaming response.
+    public func rewrite(_ text: String, context: WritingContext? = nil) async throws -> String {
         guard let url = URL(string: configuration.endpoint),
               let scheme = url.scheme?.lowercased(),
               scheme == "https" || scheme == "http" else {
@@ -47,14 +63,46 @@ struct LLMClient {
         }
 
         do {
-            return try await send(text, to: url, temperature: Self.temperature)
+            return try await send(text, to: url, temperature: Self.temperature, context: context)
         } catch MendError.serviceError(let message)
             where message.localizedCaseInsensitiveContains("temperature") {
-            return try await send(text, to: url, temperature: nil)
+            return try await send(text, to: url, temperature: nil, context: context)
         }
     }
 
-    private func send(_ text: String, to url: URL, temperature: Double?) async throws -> String {
+    /// Streams rewrite tokens in real time via Server-Sent Events (SSE).
+    public func streamRewrite(_ text: String, context: WritingContext? = nil) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                guard let url = URL(string: configuration.endpoint),
+                      let scheme = url.scheme?.lowercased(),
+                      scheme == "https" || scheme == "http" else {
+                    continuation.finish(throwing: MendError.invalidEndpoint)
+                    return
+                }
+
+                do {
+                    try await performStream(text, to: url, temperature: Self.temperature, context: context, continuation: continuation)
+                    continuation.finish()
+                } catch MendError.serviceError(let message)
+                    where message.localizedCaseInsensitiveContains("temperature") {
+                    do {
+                        try await performStream(text, to: url, temperature: nil, context: context, continuation: continuation)
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private func makeRequest(to url: URL, text: String, temperature: Double?, stream: Bool, context: WritingContext?) throws -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 45
@@ -63,10 +111,22 @@ struct LLMClient {
             request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
         }
 
+        var systemPrompt = configuration.prompt
+        if let context {
+            var parts = [systemPrompt]
+            if let contextual = context.contextualInstruction {
+                parts.append(contextual)
+            }
+            if let vocab = context.vocabularyInstruction {
+                parts.append(vocab)
+            }
+            systemPrompt = parts.joined(separator: "\n\n")
+        }
+
         let body = ChatRequest(
             model: configuration.model,
             messages: [
-                .init(role: "system", content: configuration.prompt),
+                .init(role: "system", content: systemPrompt),
                 .init(
                     role: "user",
                     content: """
@@ -78,10 +138,15 @@ struct LLMClient {
                     """
                 ),
             ],
-            temperature: temperature
+            temperature: temperature,
+            stream: stream ? true : nil
         )
         request.httpBody = try JSONEncoder().encode(body)
+        return request
+    }
 
+    private func send(_ text: String, to url: URL, temperature: Double?, context: WritingContext?) async throws -> String {
+        let request = try makeRequest(to: url, text: text, temperature: temperature, stream: false, context: context)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw MendError.invalidResponse
@@ -101,6 +166,50 @@ struct LLMClient {
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    private func performStream(
+        _ text: String,
+        to url: URL,
+        temperature: Double?,
+        context: WritingContext?,
+        continuation: AsyncThrowingStream<String, Error>.Continuation
+    ) async throws {
+        let request = try makeRequest(to: url, text: text, temperature: temperature, stream: true, context: context)
+        let (bytes, response) = try await session.bytes(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw MendError.invalidResponse
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            var errorBody = ""
+            for try await line in bytes.lines {
+                errorBody += line
+            }
+            if let data = errorBody.data(using: .utf8),
+               let error = try? JSONDecoder().decode(ServiceErrorEnvelope.self, from: data) {
+                throw MendError.serviceError(error.error.message)
+            }
+            throw MendError.serviceError("The API returned HTTP \(http.statusCode)")
+        }
+
+        for try await line in bytes.lines {
+            try Task.checkCancellation()
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("data:") else { continue }
+            let payload = trimmed.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            if payload == "[DONE]" { break }
+
+            guard let data = payload.data(using: .utf8),
+                  let chunk = try? JSONDecoder().decode(ChatStreamChunk.self, from: data) else {
+                continue
+            }
+
+            if let content = chunk.choices.first?.delta.content, !content.isEmpty {
+                continuation.yield(content)
+            }
+        }
+    }
 }
 
 private struct ChatRequest: Encodable {
@@ -112,6 +221,7 @@ private struct ChatRequest: Encodable {
     let model: String
     let messages: [Message]
     let temperature: Double?
+    let stream: Bool?
 }
 
 private struct ChatResponse: Decodable {
@@ -123,6 +233,16 @@ private struct ChatResponse: Decodable {
         let message: Message
     }
 
+    let choices: [Choice]
+}
+
+private struct ChatStreamChunk: Decodable {
+    struct Choice: Decodable {
+        struct Delta: Decodable {
+            let content: String?
+        }
+        let delta: Delta
+    }
     let choices: [Choice]
 }
 

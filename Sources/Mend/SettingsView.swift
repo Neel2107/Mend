@@ -8,6 +8,9 @@ struct SettingsView: View {
     let onCheckForUpdates: @MainActor () -> Void
     let onError: @MainActor (any Error) -> Void
 
+    @State private var newVocabularyTerm: String = ""
+    @State private var historyCount: Int = UndoVault.shared.allRecords().count
+
     var body: some View {
         Form {
             Section {
@@ -15,14 +18,17 @@ struct SettingsView: View {
                     Text("Provider")
                     Spacer(minLength: 12)
                     APIProviderPicker(selection: providerBinding)
-                        .frame(width: 320)
+                        .frame(width: 380)
                 }
 
                 settingsField("Endpoint", text: $settings.endpoint)
                 settingsField("Model", text: $settings.model)
                 HStack(spacing: 8) {
-                    SecureField("\(settings.provider.displayName) API key", text: $settings.apiKey)
-                        .textFieldStyle(.roundedBorder)
+                    SecureField(
+                        settings.provider == .ollama ? "API key (optional for local)" : "\(settings.provider.displayName) API key",
+                        text: $settings.apiKey
+                    )
+                    .textFieldStyle(.roundedBorder)
                     Button {
                         if let key = NSPasteboard.general.string(forType: .string) {
                             settings.apiKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,6 +40,59 @@ struct SettingsView: View {
                 }
             } header: {
                 Text("Provider")
+                    .font(.headline)
+            }
+
+            Section {
+                Toggle("Real-time streaming preview", isOn: $settings.enableStreaming)
+                Toggle("Show ghost diff before replacement", isOn: $settings.enableGhostDiff)
+            } header: {
+                Text("Intelligence & Feedback")
+                    .font(.headline)
+            }
+
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Preserve these exact brand names, terms, or acronyms without modification:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        TextField("Add protected term (e.g. Mend, Swift, Anthropic)", text: $newVocabularyTerm)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                addVocabularyTerm()
+                            }
+                        Button("Add") {
+                            addVocabularyTerm()
+                        }
+                        .disabled(newVocabularyTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    if !settings.customVocabulary.isEmpty {
+                        FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                            ForEach(settings.customVocabulary, id: \.self) { term in
+                                HStack(spacing: 4) {
+                                    Text(term)
+                                        .font(.caption.weight(.medium))
+                                    Button {
+                                        settings.customVocabulary.removeAll { $0 == term }
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(.quaternary, in: Capsule())
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Protected Vocabulary")
                     .font(.headline)
             }
 
@@ -65,6 +124,21 @@ struct SettingsView: View {
             }
 
             Section {
+                HStack {
+                    Text("\(historyCount) rewrites saved in Undo Vault")
+                    Spacer()
+                    Button("Clear History") {
+                        UndoVault.shared.clear()
+                        historyCount = 0
+                    }
+                    .disabled(historyCount == 0)
+                }
+            } header: {
+                Text("Undo History")
+                    .font(.headline)
+            }
+
+            Section {
                 Toggle("Show Mend in the menu bar", isOn: menuBarVisibilityBinding)
                 Toggle("Open Mend at login", isOn: launchAtLoginBinding)
                 HStack {
@@ -78,10 +152,16 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 500, minHeight: 640)
+        .frame(minWidth: 540, minHeight: 700)
     }
 
-    /// A labeled field that keeps its label beside it however long the value is.
+    private func addVocabularyTerm() {
+        let term = newVocabularyTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty, !settings.customVocabulary.contains(term) else { return }
+        settings.customVocabulary.append(term)
+        newVocabularyTerm = ""
+    }
+
     private func settingsField(_ label: String, text: Binding<String>) -> some View {
         HStack {
             Text(label)
@@ -126,7 +206,6 @@ private struct ActionEditor: View {
     @Binding var action: RewriteAction
     let canRemove: Bool
     let onRemove: () -> Void
-    /// Applies one shortcut change; false means the combination is taken.
     let onSetShortcut: (_ new: GlobalShortcut?, _ old: GlobalShortcut?) -> Bool
 
     var body: some View {
@@ -142,7 +221,6 @@ private struct ActionEditor: View {
                 .help("Remove this action")
             }
 
-            // Wraps so any number of shortcuts fits the window's width.
             FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
                 ForEach(action.shortcuts, id: \.self) { shortcut in
                     ShortcutRecorder(shortcut: shortcut) { onSetShortcut($0, shortcut) }
@@ -151,37 +229,36 @@ private struct ActionEditor: View {
             }
 
             TextEditor(text: $action.prompt)
-                .font(.system(size: 13))
-                .frame(minHeight: 96, maxHeight: 240)
-                .padding(6)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 7)
-                        .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1)
-                }
+                .font(.body)
+                .frame(minHeight: 54)
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                )
         }
         .padding(.vertical, 4)
     }
 }
 
-/// Lays children out left to right and starts a new row when one would not fit.
 private struct FlowLayout: Layout {
-    var horizontalSpacing: CGFloat
-    var verticalSpacing: CGFloat
+    var horizontalSpacing: CGFloat = 6
+    var verticalSpacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(subviews, width: proposal.width ?? .infinity)
-        let width = rows.map(\.width).max() ?? 0
-        let height = rows.map(\.height).reduce(0, +) + verticalSpacing * CGFloat(max(rows.count - 1, 0))
-        return CGSize(width: proposal.width ?? width, height: height)
+        let width = proposal.width ?? 0
+        let rows = computeRows(subviews: subviews, totalWidth: width)
+        let totalHeight = rows.reduce(0) { $0 + $1.height } + CGFloat(max(0, rows.count - 1)) * verticalSpacing
+        return CGSize(width: width, height: totalHeight)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = computeRows(subviews: subviews, totalWidth: bounds.width)
         var y = bounds.minY
-        for row in arrange(subviews, width: bounds.width) {
+        for row in rows {
             var x = bounds.minX
-            for (index, size) in zip(row.indices, row.sizes) {
-                subviews[index].place(
+            for (subviewIndex, size) in zip(row.indices, row.sizes) {
+                subviews[subviewIndex].place(
                     at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
                     proposal: ProposedViewSize(size)
                 )
@@ -198,13 +275,13 @@ private struct FlowLayout: Layout {
         var height: CGFloat = 0
     }
 
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
+    private func computeRows(subviews: Subviews, totalWidth: CGFloat) -> [Row] {
         var rows: [Row] = []
         var row = Row()
         for (index, subview) in subviews.enumerated() {
             let size = subview.sizeThatFits(.unspecified)
-            let needed = row.indices.isEmpty ? size.width : row.width + horizontalSpacing + size.width
-            if !row.indices.isEmpty, needed > width {
+            let candidateWidth = row.width == 0 ? size.width : row.width + horizontalSpacing + size.width
+            if candidateWidth > totalWidth && !row.indices.isEmpty {
                 rows.append(row)
                 row = Row()
             }
@@ -234,6 +311,9 @@ private struct APIProviderPicker: View {
                                 size: 14,
                                 tint: selection == provider ? .white : .primary
                             )
+                        } else if provider == .ollama {
+                            Image(systemName: "cpu")
+                                .font(.system(size: 11, weight: .medium))
                         } else {
                             Image(systemName: "slider.horizontal.3")
                                 .font(.system(size: 11, weight: .medium))
@@ -254,19 +334,17 @@ private struct APIProviderPicker: View {
                 .accessibilityAddTraits(selection == provider ? .isSelected : [])
             }
         }
-        .padding(2)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
-        }
+        .padding(3)
+        .background(
+            Color.secondary.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
     }
 }
 
 private struct ShortcutRecorder: View {
     let shortcut: GlobalShortcut?
     var placeholder = "Record Shortcut"
-    /// Receives the recorded shortcut, or nil to clear. False means it was refused.
     let onChange: (GlobalShortcut?) -> Bool
 
     @State private var isRecording = false
@@ -308,8 +386,6 @@ private struct ShortcutRecorder: View {
     private func beginRecording() {
         stopRecording()
         isRecording = true
-        // A click anywhere, including on another recorder, ends this one so
-        // two chips never listen at once; so does the window losing focus.
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
             guard event.type == .keyDown else {
                 stopRecording()

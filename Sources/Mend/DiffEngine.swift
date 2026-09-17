@@ -1,0 +1,159 @@
+import Foundation
+
+/// A segment of difference between original and modified text.
+public enum DiffChunk: Equatable {
+    case equal(String)
+    case insert(String)
+    case delete(String)
+
+    public var text: String {
+        switch self {
+        case .equal(let s), .insert(let s), .delete(let s):
+            return s
+        }
+    }
+}
+
+/// The outcome of computing differences between two text revisions.
+public struct DiffResult: Equatable {
+    public let chunks: [DiffChunk]
+    public let additionsCount: Int
+    public let deletionsCount: Int
+
+    public init(chunks: [DiffChunk], additionsCount: Int, deletionsCount: Int) {
+        self.chunks = chunks
+        self.additionsCount = additionsCount
+        self.deletionsCount = deletionsCount
+    }
+
+    public var hasChanges: Bool {
+        additionsCount > 0 || deletionsCount > 0
+    }
+
+    public var summary: String {
+        if !hasChanges {
+            return "No changes"
+        }
+        var parts: [String] = []
+        if additionsCount > 0 {
+            parts.append("+\(additionsCount)")
+        }
+        if deletionsCount > 0 {
+            parts.append("-\(deletionsCount)")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// Computes token-level differences using Longest Common Subsequence (LCS).
+public enum DiffEngine {
+    /// Splits text into tokens (words, punctuation, and whitespace runs).
+    public static func tokenize(_ text: String) -> [String] {
+        guard !text.isEmpty else { return [] }
+        var tokens: [String] = []
+        var current = ""
+        var inWhitespace: Bool?
+
+        for scalar in text.unicodeScalars {
+            let isSpace = CharacterSet.whitespacesAndNewlines.contains(scalar)
+            if let wasSpace = inWhitespace {
+                if wasSpace == isSpace {
+                    current.unicodeScalars.append(scalar)
+                } else {
+                    tokens.append(current)
+                    current = String(scalar)
+                    inWhitespace = isSpace
+                }
+            } else {
+                current.unicodeScalars.append(scalar)
+                inWhitespace = isSpace
+            }
+        }
+        if !current.isEmpty {
+            tokens.append(current)
+        }
+        return tokens
+    }
+
+    /// Compares two texts and produces word/token-level diff chunks and counts.
+    public static func diff(original: String, modified: String) -> DiffResult {
+        if original == modified {
+            return DiffResult(
+                chunks: original.isEmpty ? [] : [.equal(original)],
+                additionsCount: 0,
+                deletionsCount: 0
+            )
+        }
+
+        let a = tokenize(original)
+        let b = tokenize(modified)
+
+        let n = a.count
+        let m = b.count
+
+        // Standard LCS dynamic programming table
+        var dp = Array(repeating: Array(repeating: 0, count: m + 1), count: n + 1)
+        for i in 0..<n {
+            for j in 0..<m {
+                if a[i] == b[j] {
+                    dp[i + 1][j + 1] = dp[i][j] + 1
+                } else {
+                    dp[i + 1][j + 1] = max(dp[i + 1][j], dp[i][j + 1])
+                }
+            }
+        }
+
+        // Backtrack to build diff
+        var rawChunks: [DiffChunk] = []
+        var i = n
+        var j = m
+
+        while i > 0 || j > 0 {
+            if i > 0 && j > 0 && a[i - 1] == b[j - 1] {
+                rawChunks.append(.equal(a[i - 1]))
+                i -= 1
+                j -= 1
+            } else if j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j]) {
+                rawChunks.append(.insert(b[j - 1]))
+                j -= 1
+            } else if i > 0 && (j == 0 || dp[i][j - 1] < dp[i - 1][j]) {
+                rawChunks.append(.delete(a[i - 1]))
+                i -= 1
+            }
+        }
+        rawChunks.reverse()
+
+        // Merge adjacent chunks of the same type
+        var merged: [DiffChunk] = []
+        var additions = 0
+        var deletions = 0
+
+        for chunk in rawChunks {
+            let isWhitespaceOnly = chunk.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            switch chunk {
+            case .equal(let text):
+                if case .equal(let lastText)? = merged.last {
+                    merged[merged.count - 1] = .equal(lastText + text)
+                } else {
+                    merged.append(chunk)
+                }
+            case .insert(let text):
+                if !isWhitespaceOnly { additions += 1 }
+                if case .insert(let lastText)? = merged.last {
+                    merged[merged.count - 1] = .insert(lastText + text)
+                } else {
+                    merged.append(chunk)
+                }
+            case .delete(let text):
+                if !isWhitespaceOnly { deletions += 1 }
+                if case .delete(let lastText)? = merged.last {
+                    merged[merged.count - 1] = .delete(lastText + text)
+                } else {
+                    merged.append(chunk)
+                }
+            }
+        }
+
+        return DiffResult(chunks: merged, additionsCount: additions, deletionsCount: deletions)
+    }
+}

@@ -22,6 +22,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     )
     private let overlay = OverlayController()
     private let selectionService = SelectionService()
+    private let undoVault = UndoVault.shared
 
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
@@ -72,6 +73,11 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
+
+        let undoItem = NSMenuItem(title: "Undo Last Mend Replacement", action: #selector(undoLastRewrite), keyEquivalent: "z")
+        undoItem.keyEquivalentModifierMask = [.control, .option]
+        menu.addItem(undoItem)
+
         menu.addItem(NSMenuItem(title: "Enable Accessibility…", action: #selector(requestAccessibility), keyEquivalent: ""))
         // Hold Option while the menu is open to reveal the overlay preview.
         let previewItem = NSMenuItem(title: "Preview Overlay States", action: #selector(showTestPill), keyEquivalent: "")
@@ -153,8 +159,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         globalMenuClickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak menu = statusMenu] _ in
-            // Menu tracking runs its own modal event loop on the main thread.
-            // Cancel synchronously so another menu-bar panel cannot open behind it.
             menu?.cancelTracking()
         }
     }
@@ -177,6 +181,26 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         }
     }
 
+    @objc func undoLastRewrite() {
+        guard let record = undoVault.lastRecord() else {
+            overlay.show(.message("No Mend history to undo", symbol: "arrow.uturn.backward.circle"), autoHideAfter: 2)
+            return
+        }
+
+        activeTask?.cancel()
+        activeTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                self.overlay.show(.working("Restoring original…"))
+                let selection = try await self.selectionService.captureSelection()
+                _ = try await self.selectionService.replaceSelection(record.originalText, in: selection)
+                self.overlay.show(.success("Restored original text"), autoHideAfter: 1.5)
+            } catch {
+                self.overlay.show(.failure("Couldn’t restore text: \(error.localizedDescription)"), autoHideAfter: 3)
+            }
+        }
+    }
+
     private func handleShortcut(for actionID: UUID, via shortcut: GlobalShortcut) {
         guard let action = settings.action(id: actionID) else { return }
         overlay.anchorFrame = selectionService.focusedWindowFrame()
@@ -188,8 +212,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             return
         }
 
-        // Keep a visible result in place while selection is validated so the
-        // next state can transform in the same pill instead of reopening it.
         overlay.keepVisibleForNextState()
 
         guard AXIsProcessTrusted() else {
@@ -209,7 +231,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             guard let self else { return }
 
             let timeline = RewriteTimeline()
-            // Warm the connection while the selection is being read.
             let warmup = LLMClient(configuration: providerConfigurations[0].llm).preconnect()
             defer {
                 warmup.cancel()
@@ -222,33 +243,60 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
                 overlay.show(.working(action.workingLabel))
 
-                let result = try await rewrite(
+                let writingContext = WritingContext.current(
+                    application: selection.application,
+                    surrounding: selection.surroundingContext,
+                    vocabulary: settings.customVocabulary
+                )
+
+                let (result, providerUsed) = try await rewrite(
                     selection.text,
                     using: providerConfigurations,
                     for: action,
                     via: shortcut,
+                    context: writingContext,
                     timeline: timeline
                 )
                 try Task.checkCancellation()
 
-                guard result.trimmingCharacters(in: .whitespacesAndNewlines)
-                    != selection.text.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                let diff = DiffEngine.diff(original: selection.text, modified: result)
+                guard diff.hasChanges else {
                     overlay.show(.message("No changes suggested", symbol: "equal.circle.fill"), autoHideAfter: 2)
                     await finish(timeline, warmup: warmup, outcome: "no changes")
                     return
                 }
 
+                if settings.enableGhostDiff {
+                    overlay.show(.diff(summary: diff.summary, actionLabel: action.displayName))
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                }
+
                 let replacement = try await selectionService.replaceSelection(result, in: selection)
                 timeline.mark("replace")
-                // An unverified paste almost always landed; a paste that
-                // clearly failed throws instead. The log keeps the distinction.
-                overlay.show(.success("Fixed"), autoHideAfter: 1.2)
+
+                let methodString: String
                 switch replacement {
                 case .verified(let method):
-                    await finish(timeline, warmup: warmup, outcome: "fixed via \(method.rawValue)")
+                    methodString = method.rawValue
                 case .unverified:
-                    await finish(timeline, warmup: warmup, outcome: "pasted unverified")
+                    methodString = "paste (unverified)"
                 }
+
+                // Log to persistent Undo Vault
+                let record = RewriteRecord(
+                    bundleID: writingContext.bundleIdentifier,
+                    appName: writingContext.applicationName,
+                    actionName: action.displayName,
+                    originalText: selection.text,
+                    replacedText: result,
+                    provider: providerUsed.displayName,
+                    latencyMs: Double(timeline.total.components.seconds * 1000),
+                    method: methodString
+                )
+                undoVault.record(record)
+
+                overlay.show(.success("Fixed"), autoHideAfter: 1.2)
+                await finish(timeline, warmup: warmup, outcome: "fixed via \(methodString)")
             } catch is CancellationError {
                 overlay.show(.message("Cancelled", symbol: "xmark.circle.fill"), autoHideAfter: 1.2)
                 await finish(timeline, warmup: warmup, outcome: "cancelled")
@@ -259,7 +307,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         }
     }
 
-    /// Writes the timeline once the warm-up has settled, then releases the task slot.
     private func finish(_ timeline: RewriteTimeline, warmup: Task<Duration?, Never>, outcome: String) async {
         activeTask = nil
         warmup.cancel()
@@ -274,8 +321,9 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         using configurations: [ProviderConfiguration],
         for action: RewriteAction,
         via shortcut: GlobalShortcut,
+        context: WritingContext,
         timeline: RewriteTimeline
-    ) async throws -> String {
+    ) async throws -> (text: String, provider: LLMProvider) {
         var attemptedProviders: [LLMProvider] = []
         var lastError: (any Error)?
 
@@ -294,11 +342,29 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             attemptedProviders.append(configuration.provider)
             defer { timeline.mark(configuration.provider.displayName) }
             do {
-                let result = try await LLMClient(configuration: configuration.llm).rewrite(text)
+                let client = LLMClient(configuration: configuration.llm)
+                let result: String
+
+                if settings.enableStreaming {
+                    var accumulated = ""
+                    var streamCount = 0
+                    for try await token in client.streamRewrite(text, context: context) {
+                        try Task.checkCancellation()
+                        accumulated += token
+                        streamCount += 1
+                        if streamCount % 3 == 0 {
+                            overlay.show(.streaming(partial: accumulated, actionLabel: action.displayName))
+                        }
+                    }
+                    result = accumulated.trimmingCharacters(in: .whitespacesAndNewlines)
+                } else {
+                    result = try await client.rewrite(text, context: context)
+                }
+
                 guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw MendError.emptyResponse
                 }
-                return result
+                return (result, configuration.provider)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -313,8 +379,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         throw CoordinatorError.providersFailed(attemptedProviders, lastError)
     }
 
-    /// Keeps a long wait honest. After two seconds the capsule shows how to
-    /// cancel, and after five it names the provider it is waiting on.
     private func narrateWait(label: String, provider: LLMProvider, shortcut: GlobalShortcut) -> Task<Void, Never> {
         Task { @MainActor [weak self] in
             let hint = " · \(shortcut.displayString) to cancel"
@@ -346,7 +410,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             let window = NSWindow(contentViewController: controller)
             window.title = "Mend Settings"
             window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 520, height: 640))
+            window.setContentSize(NSSize(width: 540, height: 680))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
@@ -354,13 +418,9 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
 
         NSApplication.shared.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
-        // Do not open with the endpoint selected: a stray keystroke would
-        // replace it, and edits apply as they are made.
         settingsWindow?.makeFirstResponder(nil)
     }
 
-    /// Persists the settings and re-registers shortcuts. Runs after every
-    /// edit settles and once more when the app quits.
     func applySettings() {
         if let problem = registerShortcuts(for: settings.actions) {
             reportSettingsProblem(problem)
@@ -377,9 +437,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         overlay.show(.failure(message), autoHideAfter: 5)
     }
 
-    /// Registers a hotkey for every shortcut of every action. A shortcut that
-    /// cannot be registered, because another app or an older duplicate holds
-    /// it, is skipped so the rest keep working; the message names it.
     private func registerShortcuts(for actions: [RewriteAction]) -> String? {
         if actions == registeredActions { return nil }
 
@@ -395,8 +452,6 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             }
         }
 
-        // Leave the set unremembered while something failed, so the next
-        // edit retries the shortcut instead of assuming it is registered.
         registeredActions = unavailable.isEmpty ? actions : []
 
         switch unavailable.count {
@@ -427,7 +482,11 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
         overlay.anchorFrame = nil
         Task { @MainActor in
             overlay.show(.working("Fix grammar…"))
-            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            overlay.show(.streaming(partial: "I sent it yesterday", actionLabel: "Fix grammar"))
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            overlay.show(.diff(summary: "+1, -1", actionLabel: "Fix grammar"))
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
             overlay.show(.success("Fixed"))
             try? await Task.sleep(nanoseconds: 1_100_000_000)
             overlay.show(.message("No changes suggested"))

@@ -2,48 +2,54 @@ import AppKit
 import SwiftUI
 
 // Change these values to explore the overlay without touching its behavior.
-enum OverlayDesign {
-    static let initialPanelSize = NSSize(width: 210, height: 42)
-    static let minimumPanelWidth: CGFloat = 88
-    static let maximumPanelWidth: CGFloat = 320
-    /// Errors need room to be read before they disappear.
-    static let maximumFailurePanelWidth: CGFloat = 520
-    static let trailingMargin: CGFloat = 20
-    static let bottomMargin: CGFloat = 18
+public enum OverlayDesign {
+    public static let initialPanelSize = NSSize(width: 210, height: 42)
+    public static let minimumPanelWidth: CGFloat = 88
+    public static let maximumPanelWidth: CGFloat = 340
+    /// Errors and streaming text need room to be read.
+    public static let maximumFailurePanelWidth: CGFloat = 520
+    public static let trailingMargin: CGFloat = 20
+    public static let bottomMargin: CGFloat = 18
     /// Windows smaller than this get the screen corner instead of their own.
-    static let minimumAnchorSize = NSSize(width: 360, height: 160)
+    public static let minimumAnchorSize = NSSize(width: 360, height: 160)
 
-    static let horizontalPadding: CGFloat = 11
-    static let contentSpacing: CGFloat = 8
-    static let iconSize: CGFloat = 17
-    static let labelFontSize: CGFloat = 13
-    static let resizeDuration: TimeInterval = 0.42
-    static let contentTransitionDuration: TimeInterval = 0.24
-    static let transitionBlurRadius: CGFloat = 5
-    static let presentationDelayNanoseconds: UInt64 = 16_000_000
+    public static let horizontalPadding: CGFloat = 11
+    public static let contentSpacing: CGFloat = 8
+    public static let iconSize: CGFloat = 17
+    public static let labelFontSize: CGFloat = 13
+    public static let resizeDuration: TimeInterval = 0.42
+    public static let contentTransitionDuration: TimeInterval = 0.24
+    public static let transitionBlurRadius: CGFloat = 5
+    public static let presentationDelayNanoseconds: UInt64 = 16_000_000
 }
 
-enum OverlayState: Equatable {
+public enum OverlayState: Equatable {
     case working(String)
+    case streaming(partial: String, actionLabel: String)
+    case diff(summary: String, actionLabel: String)
     case success(String)
     case failure(String)
     case message(String, symbol: String = "text.badge.checkmark")
 }
 
 @MainActor
-final class OverlayModel: ObservableObject {
-    static let initialState = OverlayState.working("Fixing grammar…")
+public final class OverlayModel: ObservableObject {
+    public static let initialState = OverlayState.working("Fixing grammar…")
 
-    @Published var state: OverlayState = initialState
+    @Published public var state: OverlayState = initialState
+
+    public init(state: OverlayState = initialState) {
+        self.state = state
+    }
 }
 
-final class NonActivatingPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
+public final class NonActivatingPanel: NSPanel {
+    public override var canBecomeKey: Bool { false }
+    public override var canBecomeMain: Bool { false }
 }
 
 @MainActor
-protocol OverlayPanelPresenting: AnyObject {
+public protocol OverlayPanelPresenting: AnyObject {
     var isVisible: Bool { get }
     func setOverlayFrame(_ frame: NSRect, animated: Bool)
     func setOverlayContentVisible(_ isVisible: Bool)
@@ -54,7 +60,7 @@ protocol OverlayPanelPresenting: AnyObject {
 }
 
 extension NonActivatingPanel: OverlayPanelPresenting {
-    func setOverlayFrame(_ frame: NSRect, animated: Bool) {
+    public func setOverlayFrame(_ frame: NSRect, animated: Bool) {
         guard animated else {
             setFrame(frame, display: true)
             return
@@ -72,41 +78,40 @@ extension NonActivatingPanel: OverlayPanelPresenting {
         }
     }
 
-    func prepareForPresentation() {
+    public func prepareForPresentation() {
         contentView?.layoutSubtreeIfNeeded()
         displayIfNeeded()
     }
 
-    func setOverlayContentVisible(_ isVisible: Bool) {
+    public func setOverlayContentVisible(_ isVisible: Bool) {
         alphaValue = isVisible ? 1 : 0
     }
 
-    func rebuildOverlayContent(using model: OverlayModel) {
+    public func rebuildOverlayContent(using model: OverlayModel) {
         contentView = NSHostingView(rootView: OverlayView(model: model))
     }
 
-    func showOverlay() {
+    public func showOverlay() {
         orderFrontRegardless()
     }
 
-    func hideOverlay() {
+    public func hideOverlay() {
         orderOut(nil)
     }
 }
 
 @MainActor
-final class OverlayController {
+public final class OverlayController {
     private let model: OverlayModel
     private let panel: any OverlayPanelPresenting
     private var hideTask: Task<Void, Never>?
     private var presentationTask: Task<Void, Never>?
     private var isPresentationPending = false
 
-    /// The window the user is editing, in AppKit screen coordinates. When
-    /// set, the capsule sits in that window's corner instead of the screen's.
-    var anchorFrame: NSRect?
+    /// The window the user is editing, in AppKit screen coordinates.
+    public var anchorFrame: NSRect?
 
-    init() {
+    public init() {
         let model = OverlayModel()
         let panel = NonActivatingPanel(
             contentRect: NSRect(origin: .zero, size: OverlayDesign.initialPanelSize),
@@ -126,12 +131,12 @@ final class OverlayController {
         self.panel = panel
     }
 
-    init(model: OverlayModel, panel: any OverlayPanelPresenting) {
+    public init(model: OverlayModel, panel: any OverlayPanelPresenting) {
         self.model = model
         self.panel = panel
     }
 
-    func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
+    public func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
         hideTask?.cancel()
         presentationTask?.cancel()
         let shouldAnimate = panel.isVisible && !isPresentationPending
@@ -147,8 +152,6 @@ final class OverlayController {
 
         resizeAndPositionPanel(for: state, animated: shouldAnimate)
         if !shouldAnimate {
-            // Hidden NSWindows can retain their last backing frame. Keep that frame
-            // transparent, replace the SwiftUI tree, and reveal on the next frame.
             panel.setOverlayContentVisible(false)
             panel.rebuildOverlayContent(using: model)
             panel.prepareForPresentation()
@@ -179,12 +182,12 @@ final class OverlayController {
         }
     }
 
-    func keepVisibleForNextState() {
+    public func keepVisibleForNextState() {
         hideTask?.cancel()
         hideTask = nil
     }
 
-    func waitForPendingPresentation() async {
+    public func waitForPendingPresentation() async {
         await presentationTask?.value
     }
 
@@ -197,8 +200,6 @@ final class OverlayController {
     }
 
     private func resizeAndPositionPanel(for state: OverlayState, animated: Bool) {
-        // NSScreen.main follows the window of the currently active writing app.
-        // The panel never activates Mend, so this remains the user's working screen.
         let screen = anchorFrame.flatMap { anchor in
             NSScreen.screens.first { $0.frame.intersects(anchor) }
         } ?? NSScreen.main
@@ -213,15 +214,11 @@ final class OverlayController {
         panel.setOverlayFrame(frame, animated: animated)
     }
 
-    /// The capsule's frame: the bottom-right corner of the anchored window,
-    /// or of the screen when there is no usable window. Keeping the trailing
-    /// edge fixed lets the capsule grow and shrink in place.
-    nonisolated static func panelFrame(width: CGFloat, height: CGFloat, anchor: NSRect?, within visibleFrame: NSRect) -> NSRect {
+    public nonisolated static func panelFrame(width: CGFloat, height: CGFloat, anchor: NSRect?, within visibleFrame: NSRect) -> NSRect {
         var container = visibleFrame
         if let anchor,
            anchor.width >= OverlayDesign.minimumAnchorSize.width,
            anchor.height >= OverlayDesign.minimumAnchorSize.height {
-            // A window hanging off the screen still gets an on-screen capsule.
             let visible = anchor.intersection(visibleFrame)
             if !visible.isNull,
                visible.width >= width + OverlayDesign.trailingMargin * 2,
@@ -247,6 +244,12 @@ final class OverlayController {
             maximumWidth = OverlayDesign.maximumFailurePanelWidth
         case .working(let text), .success(let text), .message(let text, _):
             label = text
+            maximumWidth = OverlayDesign.maximumPanelWidth
+        case .streaming(let partial, let actionLabel):
+            label = "\(actionLabel): \(partial)"
+            maximumWidth = OverlayDesign.maximumFailurePanelWidth
+        case .diff(let summary, let actionLabel):
+            label = "\(actionLabel) · \(summary)"
             maximumWidth = OverlayDesign.maximumPanelWidth
         }
 
@@ -278,7 +281,6 @@ private struct OverlayView: View {
                     .id(label)
                     .transition(.mendBlur)
             }
-
         }
         .padding(.horizontal, OverlayDesign.horizontalPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -292,8 +294,12 @@ private struct OverlayView: View {
     @ViewBuilder
     private var icon: some View {
         switch model.state {
-        case .working:
+        case .working, .streaming:
             SearchingOrb()
+        case .diff:
+            Image(systemName: "plus.forwardslash.minus")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.cyan)
         case .success:
             Image(systemName: "checkmark.circle.fill")
                 .symbolRenderingMode(.hierarchical)
@@ -313,13 +319,19 @@ private struct OverlayView: View {
         switch model.state {
         case .working(let text), .success(let text), .failure(let text), .message(let text, _):
             return text
+        case .streaming(let partial, let actionLabel):
+            let trimmed = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return "\(actionLabel)…"
+            }
+            let preview = trimmed.count > 24 ? "…" + String(trimmed.suffix(24)) : trimmed
+            return "\(actionLabel): \(preview)"
+        case .diff(let summary, let actionLabel):
+            return "\(actionLabel) · \(summary)"
         }
     }
 }
 
-/// Liquid Glass on macOS 26 and later, so the capsule refracts whatever is
-/// behind it instead of sitting as a flat grey slab over light windows.
-/// Earlier systems keep the thick material.
 private struct CapsuleSurface: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26, *) {

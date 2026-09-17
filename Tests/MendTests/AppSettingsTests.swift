@@ -300,4 +300,35 @@ struct AppSettingsTests {
         _ = AppSettings(readsAPIKeyFromKeychain: true, defaults: defaults, keychain: keychain)
         #expect(keychain.reads.count == readsBefore + 1)
     }
+
+    @Test("Ollama provider defaults to local endpoint and needs no API key")
+    func testOllamaProvider() {
+        let settings = makeSettings(makeDefaults())
+        settings.selectProvider(.ollama)
+
+        #expect(settings.endpoint == "http://127.0.0.1:11434/v1/chat/completions")
+        #expect(settings.model == "llama3.2:3b")
+        #expect(settings.setupProblem(for: settings.actions[0]) == nil)
+        #expect(settings.hasUsableProvider)
+
+        let configs = settings.availableProviderConfigurations(prompt: "Fix it.")
+        #expect(configs.first?.provider == .ollama)
+        #expect(configs.first?.llm.endpoint == "http://127.0.0.1:11434/v1/chat/completions")
+    }
+
+    @Test("Custom vocabulary, ghost diff and streaming settings persist across saves")
+    func testV2SettingsPersistence() throws {
+        let defaults = makeDefaults()
+        let settings = makeSettings(defaults)
+
+        settings.customVocabulary = ["Mend", "Antigravity", "GraphQL"]
+        settings.enableGhostDiff = true
+        settings.enableStreaming = false
+        try settings.save()
+
+        let reloaded = makeSettings(defaults)
+        #expect(reloaded.customVocabulary == ["Mend", "Antigravity", "GraphQL"])
+        #expect(reloaded.enableGhostDiff == true)
+        #expect(reloaded.enableStreaming == false)
+    }
 }
