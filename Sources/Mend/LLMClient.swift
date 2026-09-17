@@ -1,12 +1,12 @@
 import Foundation
 
-public struct LLMConfiguration: Equatable {
-    public let endpoint: String
-    public let model: String
-    public let prompt: String
-    public let apiKey: String
+struct LLMConfiguration: Equatable {
+    let endpoint: String
+    let model: String
+    let prompt: String
+    let apiKey: String
 
-    public init(endpoint: String, model: String, prompt: String, apiKey: String) {
+    init(endpoint: String, model: String, prompt: String, apiKey: String) {
         self.endpoint = endpoint
         self.model = model
         self.prompt = prompt
@@ -14,33 +14,33 @@ public struct LLMConfiguration: Equatable {
     }
 }
 
-public struct ProviderConfiguration {
-    public let provider: LLMProvider
-    public let llm: LLMConfiguration
+struct ProviderConfiguration {
+    let provider: LLMProvider
+    let llm: LLMConfiguration
 
-    public init(provider: LLMProvider, llm: LLMConfiguration) {
+    init(provider: LLMProvider, llm: LLMConfiguration) {
         self.provider = provider
         self.llm = llm
     }
 }
 
-public struct LLMClient {
-    public let configuration: LLMConfiguration
-    public var session: URLSession = .shared
+struct LLMClient {
+    let configuration: LLMConfiguration
+    var session: URLSession = .shared
 
     /// Corrections should be repeatable, so requests ask for a deterministic
     /// sample. Models that only accept their default temperature reject the
     /// parameter, and those requests are retried without it.
-    public static let temperature: Double = 0
+    static let temperature: Double = 0
 
-    public init(configuration: LLMConfiguration, session: URLSession = .shared) {
+    init(configuration: LLMConfiguration, session: URLSession = .shared) {
         self.configuration = configuration
         self.session = session
     }
 
     /// Opens a connection to the provider ahead of the request, so DNS, TCP,
     /// and TLS happen while the selection is still being read.
-    public func preconnect() -> Task<Duration?, Never> {
+    func preconnect() -> Task<Duration?, Never> {
         Task.detached(priority: .userInitiated) { [session, configuration] in
             guard let endpoint = URL(string: configuration.endpoint),
                   let origin = URL(string: "/", relativeTo: endpoint) else { return nil }
@@ -55,7 +55,7 @@ public struct LLMClient {
     }
 
     /// Rewrites the text in a single non-streaming response.
-    public func rewrite(_ text: String, context: WritingContext? = nil) async throws -> String {
+    func rewrite(_ text: String, context: WritingContext? = nil) async throws -> String {
         guard let url = URL(string: configuration.endpoint),
               let scheme = url.scheme?.lowercased(),
               scheme == "https" || scheme == "http" else {
@@ -71,7 +71,7 @@ public struct LLMClient {
     }
 
     /// Streams rewrite tokens in real time via Server-Sent Events (SSE).
-    public func streamRewrite(_ text: String, context: WritingContext? = nil) -> AsyncThrowingStream<String, Error> {
+    func streamRewrite(_ text: String, context: WritingContext? = nil) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 guard let url = URL(string: configuration.endpoint),

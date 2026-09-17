@@ -1,15 +1,15 @@
 import Combine
 import Foundation
 
-public enum LLMProvider: String, CaseIterable, Identifiable {
+enum LLMProvider: String, CaseIterable, Identifiable {
     case openAI
     case gemini
     case ollama
     case custom
 
-    public var id: String { rawValue }
+    var id: String { rawValue }
 
-    public var displayName: String {
+    var displayName: String {
         switch self {
         case .openAI: return "OpenAI"
         case .gemini: return "Gemini"
@@ -18,7 +18,7 @@ public enum LLMProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    public var defaultEndpoint: String? {
+    var defaultEndpoint: String? {
         switch self {
         case .openAI:
             return "https://api.openai.com/v1/chat/completions"
@@ -31,7 +31,7 @@ public enum LLMProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    public var defaultModel: String? {
+    var defaultModel: String? {
         switch self {
         case .openAI: return "gpt-4.1-mini"
         case .gemini: return "gemini-3.5-flash-lite"
@@ -40,7 +40,7 @@ public enum LLMProvider: String, CaseIterable, Identifiable {
         }
     }
 
-    public var brand: ProviderBrand? {
+    var brand: ProviderBrand? {
         switch self {
         case .openAI: return .openAI
         case .gemini: return .gemini
@@ -50,13 +50,13 @@ public enum LLMProvider: String, CaseIterable, Identifiable {
 }
 
 /// One thing Mend can do to a selection: an instruction and the shortcuts that run it.
-public struct RewriteAction: Codable, Identifiable, Equatable {
-    public var id: UUID
-    public var name: String
-    public var prompt: String
-    public var shortcuts: [GlobalShortcut]
+struct RewriteAction: Codable, Identifiable, Equatable {
+    var id: UUID
+    var name: String
+    var prompt: String
+    var shortcuts: [GlobalShortcut]
 
-    public init(id: UUID = UUID(), name: String, prompt: String, shortcuts: [GlobalShortcut]) {
+    init(id: UUID = UUID(), name: String, prompt: String, shortcuts: [GlobalShortcut]) {
         self.id = id
         self.name = name
         self.prompt = prompt
@@ -68,7 +68,7 @@ public struct RewriteAction: Codable, Identifiable, Equatable {
         case legacyShortcut = "shortcut"
     }
 
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
@@ -82,7 +82,7 @@ public struct RewriteAction: Codable, Identifiable, Equatable {
         }
     }
 
-    public func encode(to encoder: any Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
@@ -90,30 +90,30 @@ public struct RewriteAction: Codable, Identifiable, Equatable {
         try container.encode(shortcuts, forKey: .shortcuts)
     }
 
-    public mutating func addShortcut(_ shortcut: GlobalShortcut) {
+    mutating func addShortcut(_ shortcut: GlobalShortcut) {
         guard !shortcuts.contains(shortcut) else { return }
         shortcuts.append(shortcut)
     }
 
-    public var displayName: String {
+    var displayName: String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Rewrite" : trimmed
     }
 
     /// What the capsule shows while this action runs.
-    public var workingLabel: String {
+    var workingLabel: String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Rewriting…" : "\(trimmed)…"
     }
 
-    public static func makeDefault() -> RewriteAction {
+    static func makeDefault() -> RewriteAction {
         RewriteAction(name: "Fix grammar", prompt: AppSettings.defaultPrompt, shortcuts: [.default])
     }
 }
 
 @MainActor
-public final class AppSettings: ObservableObject {
-    public nonisolated static let defaultPrompt = """
+final class AppSettings: ObservableObject {
+    nonisolated static let defaultPrompt = """
     Correct grammar, spelling, punctuation, and awkward phrasing. Preserve the writer's meaning, tone, formatting, and level of formality. Make the smallest changes needed. Return only the corrected text.
     """
 
@@ -131,22 +131,22 @@ public final class AppSettings: ObservableObject {
         static let legacyShortcut = "globalShortcut"
     }
 
-    @Published public private(set) var provider: LLMProvider
-    @Published public var endpoint: String
-    @Published public var model: String
-    @Published public var apiKey: String
-    @Published public var actions: [RewriteAction]
-    @Published public var customVocabulary: [String]
-    @Published public var enableGhostDiff: Bool
-    @Published public var enableStreaming: Bool
-    @Published public private(set) var showsMenuBarIcon: Bool
-    @Published public private(set) var launchesAtLogin: Bool
+    @Published private(set) var provider: LLMProvider
+    @Published var endpoint: String
+    @Published var model: String
+    @Published var apiKey: String
+    @Published var actions: [RewriteAction]
+    @Published var customVocabulary: [String]
+    @Published var enableGhostDiff: Bool
+    @Published var enableStreaming: Bool
+    @Published private(set) var showsMenuBarIcon: Bool
+    @Published private(set) var launchesAtLogin: Bool
 
-    public struct ProviderDraft: Codable, Equatable {
-        public var endpoint: String
-        public var model: String
+    struct ProviderDraft: Codable, Equatable {
+        var endpoint: String
+        var model: String
 
-        public init(endpoint: String, model: String) {
+        init(endpoint: String, model: String) {
             self.endpoint = endpoint
             self.model = model
         }
@@ -159,9 +159,9 @@ public final class AppSettings: ObservableObject {
     private let usesKeychain: Bool
     private var cancellables: Set<AnyCancellable> = []
 
-    public var changeHandler: (@MainActor () -> Void)?
+    var changeHandler: (@MainActor () -> Void)?
 
-    public init(
+    init(
         readsAPIKeyFromKeychain: Bool = true,
         defaults: UserDefaults = .standard,
         keychain: any KeychainAccess = SystemKeychain()
@@ -252,29 +252,29 @@ public final class AppSettings: ObservableObject {
 
     // MARK: Actions
 
-    public func addAction() {
+    func addAction() {
         actions.append(RewriteAction(name: "", prompt: Self.defaultPrompt, shortcuts: []))
     }
 
-    public func removeAction(id: UUID) {
+    func removeAction(id: UUID) {
         guard actions.count > 1 else { return }
         actions.removeAll { $0.id == id }
     }
 
-    public func restoreDefaultActions() {
+    func restoreDefaultActions() {
         actions = [RewriteAction.makeDefault()]
     }
 
-    public func action(id: UUID) -> RewriteAction? {
+    func action(id: UUID) -> RewriteAction? {
         actions.first { $0.id == id }
     }
 
-    public func isShortcutTaken(_ shortcut: GlobalShortcut) -> Bool {
+    func isShortcutTaken(_ shortcut: GlobalShortcut) -> Bool {
         actions.contains { $0.shortcuts.contains(shortcut) }
     }
 
     @discardableResult
-    public func setShortcut(_ new: GlobalShortcut?, replacing old: GlobalShortcut?, in actionID: UUID) -> Bool {
+    func setShortcut(_ new: GlobalShortcut?, replacing old: GlobalShortcut?, in actionID: UUID) -> Bool {
         guard let index = actions.firstIndex(where: { $0.id == actionID }) else { return false }
         var shortcuts = actions[index].shortcuts
 
@@ -297,7 +297,7 @@ public final class AppSettings: ObservableObject {
         return true
     }
 
-    public func setupProblem(for action: RewriteAction) -> String? {
+    func setupProblem(for action: RewriteAction) -> String? {
         if action.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Add a prompt for “\(action.displayName)” in Settings"
         }
@@ -313,19 +313,19 @@ public final class AppSettings: ObservableObject {
 
     // MARK: Menu bar and login
 
-    public func setMenuBarIconVisible(_ isVisible: Bool) {
+    func setMenuBarIconVisible(_ isVisible: Bool) {
         showsMenuBarIcon = isVisible
         defaults.set(isVisible, forKey: Key.showsMenuBarIcon)
     }
 
-    public func setLaunchesAtLogin(_ isEnabled: Bool) throws {
+    func setLaunchesAtLogin(_ isEnabled: Bool) throws {
         try LoginItem.setEnabled(isEnabled)
         launchesAtLogin = LoginItem.isEnabled
     }
 
     // MARK: Providers
 
-    public func selectProvider(_ newProvider: LLMProvider) {
+    func selectProvider(_ newProvider: LLMProvider) {
         guard newProvider != provider else { return }
 
         draftAPIKeys[provider] = apiKey
@@ -340,7 +340,7 @@ public final class AppSettings: ObservableObject {
         draftAPIKeys[newProvider] = apiKey
     }
 
-    public func availableProviderConfigurations(prompt: String) -> [ProviderConfiguration] {
+    func availableProviderConfigurations(prompt: String) -> [ProviderConfiguration] {
         let providers = [provider] + LLMProvider.allCases.filter { $0 != provider }
         let sharedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -377,7 +377,7 @@ public final class AppSettings: ObservableObject {
         }
     }
 
-    public var hasUsableProvider: Bool {
+    var hasUsableProvider: Bool {
         !availableProviderConfigurations(prompt: Self.defaultPrompt).isEmpty
     }
 
@@ -387,7 +387,7 @@ public final class AppSettings: ObservableObject {
 
     // MARK: Saving
 
-    public func save() throws {
+    func save() throws {
         defaults.set(endpoint, forKey: Key.endpoint)
         defaults.set(model, forKey: Key.model)
         defaults.set(provider.rawValue, forKey: Key.provider)

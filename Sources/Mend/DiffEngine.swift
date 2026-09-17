@@ -1,12 +1,12 @@
 import Foundation
 
 /// A segment of difference between original and modified text.
-public enum DiffChunk: Equatable {
+enum DiffChunk: Equatable {
     case equal(String)
     case insert(String)
     case delete(String)
 
-    public var text: String {
+    var text: String {
         switch self {
         case .equal(let s), .insert(let s), .delete(let s):
             return s
@@ -15,22 +15,22 @@ public enum DiffChunk: Equatable {
 }
 
 /// The outcome of computing differences between two text revisions.
-public struct DiffResult: Equatable {
-    public let chunks: [DiffChunk]
-    public let additionsCount: Int
-    public let deletionsCount: Int
+struct DiffResult: Equatable {
+    let chunks: [DiffChunk]
+    let additionsCount: Int
+    let deletionsCount: Int
 
-    public init(chunks: [DiffChunk], additionsCount: Int, deletionsCount: Int) {
+    init(chunks: [DiffChunk], additionsCount: Int, deletionsCount: Int) {
         self.chunks = chunks
         self.additionsCount = additionsCount
         self.deletionsCount = deletionsCount
     }
 
-    public var hasChanges: Bool {
+    var hasChanges: Bool {
         additionsCount > 0 || deletionsCount > 0
     }
 
-    public var summary: String {
+    var summary: String {
         if !hasChanges {
             return "No changes"
         }
@@ -46,9 +46,9 @@ public struct DiffResult: Equatable {
 }
 
 /// Computes token-level differences using Longest Common Subsequence (LCS).
-public enum DiffEngine {
+enum DiffEngine {
     /// Splits text into tokens (words, punctuation, and whitespace runs).
-    public static func tokenize(_ text: String) -> [String] {
+    static func tokenize(_ text: String) -> [String] {
         guard !text.isEmpty else { return [] }
         var tokens: [String] = []
         var current = ""
@@ -76,7 +76,7 @@ public enum DiffEngine {
     }
 
     /// Compares two texts and produces word/token-level diff chunks and counts.
-    public static func diff(original: String, modified: String) -> DiffResult {
+    static func diff(original: String, modified: String) -> DiffResult {
         if original == modified {
             return DiffResult(
                 chunks: original.isEmpty ? [] : [.equal(original)],

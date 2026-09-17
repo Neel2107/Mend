@@ -2,28 +2,28 @@ import AppKit
 import SwiftUI
 
 // Change these values to explore the overlay without touching its behavior.
-public enum OverlayDesign {
-    public static let initialPanelSize = NSSize(width: 210, height: 42)
-    public static let minimumPanelWidth: CGFloat = 88
-    public static let maximumPanelWidth: CGFloat = 340
+enum OverlayDesign {
+    static let initialPanelSize = NSSize(width: 210, height: 42)
+    static let minimumPanelWidth: CGFloat = 88
+    static let maximumPanelWidth: CGFloat = 340
     /// Errors and streaming text need room to be read.
-    public static let maximumFailurePanelWidth: CGFloat = 520
-    public static let trailingMargin: CGFloat = 20
-    public static let bottomMargin: CGFloat = 18
+    static let maximumFailurePanelWidth: CGFloat = 520
+    static let trailingMargin: CGFloat = 20
+    static let bottomMargin: CGFloat = 18
     /// Windows smaller than this get the screen corner instead of their own.
-    public static let minimumAnchorSize = NSSize(width: 360, height: 160)
+    static let minimumAnchorSize = NSSize(width: 360, height: 160)
 
-    public static let horizontalPadding: CGFloat = 11
-    public static let contentSpacing: CGFloat = 8
-    public static let iconSize: CGFloat = 17
-    public static let labelFontSize: CGFloat = 13
-    public static let resizeDuration: TimeInterval = 0.42
-    public static let contentTransitionDuration: TimeInterval = 0.24
-    public static let transitionBlurRadius: CGFloat = 5
-    public static let presentationDelayNanoseconds: UInt64 = 16_000_000
+    static let horizontalPadding: CGFloat = 11
+    static let contentSpacing: CGFloat = 8
+    static let iconSize: CGFloat = 17
+    static let labelFontSize: CGFloat = 13
+    static let resizeDuration: TimeInterval = 0.42
+    static let contentTransitionDuration: TimeInterval = 0.24
+    static let transitionBlurRadius: CGFloat = 5
+    static let presentationDelayNanoseconds: UInt64 = 16_000_000
 }
 
-public enum OverlayState: Equatable {
+enum OverlayState: Equatable {
     case working(String)
     case streaming(partial: String, actionLabel: String)
     case diff(summary: String, actionLabel: String)
@@ -33,23 +33,23 @@ public enum OverlayState: Equatable {
 }
 
 @MainActor
-public final class OverlayModel: ObservableObject {
-    public static let initialState = OverlayState.working("Fixing grammar…")
+final class OverlayModel: ObservableObject {
+    static let initialState = OverlayState.working("Fixing grammar…")
 
-    @Published public var state: OverlayState = initialState
+    @Published var state: OverlayState = initialState
 
-    public init(state: OverlayState = initialState) {
+    init(state: OverlayState = initialState) {
         self.state = state
     }
 }
 
-public final class NonActivatingPanel: NSPanel {
-    public override var canBecomeKey: Bool { false }
-    public override var canBecomeMain: Bool { false }
+final class NonActivatingPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
 }
 
 @MainActor
-public protocol OverlayPanelPresenting: AnyObject {
+protocol OverlayPanelPresenting: AnyObject {
     var isVisible: Bool { get }
     func setOverlayFrame(_ frame: NSRect, animated: Bool)
     func setOverlayContentVisible(_ isVisible: Bool)
@@ -60,7 +60,7 @@ public protocol OverlayPanelPresenting: AnyObject {
 }
 
 extension NonActivatingPanel: OverlayPanelPresenting {
-    public func setOverlayFrame(_ frame: NSRect, animated: Bool) {
+    func setOverlayFrame(_ frame: NSRect, animated: Bool) {
         guard animated else {
             setFrame(frame, display: true)
             return
@@ -78,30 +78,30 @@ extension NonActivatingPanel: OverlayPanelPresenting {
         }
     }
 
-    public func prepareForPresentation() {
+    func prepareForPresentation() {
         contentView?.layoutSubtreeIfNeeded()
         displayIfNeeded()
     }
 
-    public func setOverlayContentVisible(_ isVisible: Bool) {
+    func setOverlayContentVisible(_ isVisible: Bool) {
         alphaValue = isVisible ? 1 : 0
     }
 
-    public func rebuildOverlayContent(using model: OverlayModel) {
+    func rebuildOverlayContent(using model: OverlayModel) {
         contentView = NSHostingView(rootView: OverlayView(model: model))
     }
 
-    public func showOverlay() {
+    func showOverlay() {
         orderFrontRegardless()
     }
 
-    public func hideOverlay() {
+    func hideOverlay() {
         orderOut(nil)
     }
 }
 
 @MainActor
-public final class OverlayController {
+final class OverlayController {
     private let model: OverlayModel
     private let panel: any OverlayPanelPresenting
     private var hideTask: Task<Void, Never>?
@@ -109,9 +109,9 @@ public final class OverlayController {
     private var isPresentationPending = false
 
     /// The window the user is editing, in AppKit screen coordinates.
-    public var anchorFrame: NSRect?
+    var anchorFrame: NSRect?
 
-    public init() {
+    init() {
         let model = OverlayModel()
         let panel = NonActivatingPanel(
             contentRect: NSRect(origin: .zero, size: OverlayDesign.initialPanelSize),
@@ -131,12 +131,12 @@ public final class OverlayController {
         self.panel = panel
     }
 
-    public init(model: OverlayModel, panel: any OverlayPanelPresenting) {
+    init(model: OverlayModel, panel: any OverlayPanelPresenting) {
         self.model = model
         self.panel = panel
     }
 
-    public func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
+    func show(_ state: OverlayState, autoHideAfter seconds: Double? = nil) {
         hideTask?.cancel()
         presentationTask?.cancel()
         let shouldAnimate = panel.isVisible && !isPresentationPending
@@ -182,12 +182,12 @@ public final class OverlayController {
         }
     }
 
-    public func keepVisibleForNextState() {
+    func keepVisibleForNextState() {
         hideTask?.cancel()
         hideTask = nil
     }
 
-    public func waitForPendingPresentation() async {
+    func waitForPendingPresentation() async {
         await presentationTask?.value
     }
 
@@ -214,7 +214,7 @@ public final class OverlayController {
         panel.setOverlayFrame(frame, animated: animated)
     }
 
-    public nonisolated static func panelFrame(width: CGFloat, height: CGFloat, anchor: NSRect?, within visibleFrame: NSRect) -> NSRect {
+    nonisolated static func panelFrame(width: CGFloat, height: CGFloat, anchor: NSRect?, within visibleFrame: NSRect) -> NSRect {
         var container = visibleFrame
         if let anchor,
            anchor.width >= OverlayDesign.minimumAnchorSize.width,

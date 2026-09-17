@@ -3,13 +3,13 @@ import Foundation
 
 /// Captures surrounding application context and user-specific vocabulary
 /// to adapt the rewrite instructions to the environment the user is writing in.
-public struct WritingContext: Equatable, Codable {
-    public let bundleIdentifier: String?
-    public let applicationName: String?
-    public let surroundingContext: String?
-    public let customVocabulary: [String]
+struct WritingContext: Equatable, Codable {
+    let bundleIdentifier: String?
+    let applicationName: String?
+    let surroundingContext: String?
+    let customVocabulary: [String]
 
-    public init(
+    init(
         bundleIdentifier: String? = nil,
         applicationName: String? = nil,
         surroundingContext: String? = nil,
@@ -22,7 +22,7 @@ public struct WritingContext: Equatable, Codable {
     }
 
     /// Contextual guidance injected into the system prompt based on the target app.
-    public var contextualInstruction: String? {
+    var contextualInstruction: String? {
         guard let bundleIdentifier = bundleIdentifier?.lowercased() else { return nil }
 
         if isDeveloperApp(bundleIdentifier) {
@@ -36,7 +36,7 @@ public struct WritingContext: Equatable, Codable {
     }
 
     /// User vocabulary terms that must remain untouched.
-    public var vocabularyInstruction: String? {
+    var vocabularyInstruction: String? {
         guard !customVocabulary.isEmpty else { return nil }
         let terms = customVocabulary
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -77,7 +77,7 @@ public struct WritingContext: Equatable, Codable {
     }
 
     /// Gathers the writing context from the current running application.
-    public static func current(
+    static func current(
         application: NSRunningApplication? = NSWorkspace.shared.frontmostApplication,
         surrounding: String? = nil,
         vocabulary: [String] = []

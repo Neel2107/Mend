@@ -1,19 +1,19 @@
 import Foundation
 
 /// A persistent record of a single Mend rewrite operation.
-public struct RewriteRecord: Codable, Identifiable, Equatable {
-    public let id: UUID
-    public let timestamp: Date
-    public let bundleID: String?
-    public let appName: String?
-    public let actionName: String
-    public let originalText: String
-    public let replacedText: String
-    public let provider: String
-    public let latencyMs: Double
-    public let method: String
+struct RewriteRecord: Codable, Identifiable, Equatable {
+    let id: UUID
+    let timestamp: Date
+    let bundleID: String?
+    let appName: String?
+    let actionName: String
+    let originalText: String
+    let replacedText: String
+    let provider: String
+    let latencyMs: Double
+    let method: String
 
-    public init(
+    init(
         id: UUID = UUID(),
         timestamp: Date = Date(),
         bundleID: String? = nil,
@@ -39,8 +39,8 @@ public struct RewriteRecord: Codable, Identifiable, Equatable {
 }
 
 /// A thread-safe, persistent history vault for rewrites, enabling instant undo/rollback.
-public final class UndoVault: @unchecked Sendable {
-    public static let shared = UndoVault()
+final class UndoVault: @unchecked Sendable {
+    static let shared = UndoVault()
 
     private let queue = DispatchQueue(label: "com.mend.UndoVault", qos: .utility)
     private let storageURL: URL?
@@ -48,12 +48,12 @@ public final class UndoVault: @unchecked Sendable {
     private var cachedRecords: [RewriteRecord] = []
     private var isLoaded = false
 
-    public init(storageURL: URL? = nil, maxRecords: Int = 500) {
+    init(storageURL: URL? = nil, maxRecords: Int = 500) {
         self.storageURL = storageURL ?? Self.defaultStorageURL()
         self.maxRecords = maxRecords
     }
 
-    public static func defaultStorageURL() -> URL? {
+    static func defaultStorageURL() -> URL? {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
             return nil
         }
@@ -61,7 +61,7 @@ public final class UndoVault: @unchecked Sendable {
         return dir.appendingPathComponent("history.json")
     }
 
-    public func record(_ entry: RewriteRecord) {
+    func record(_ entry: RewriteRecord) {
         queue.sync {
             loadIfNeeded()
             cachedRecords.insert(entry, at: 0)
@@ -72,21 +72,21 @@ public final class UndoVault: @unchecked Sendable {
         }
     }
 
-    public func lastRecord() -> RewriteRecord? {
+    func lastRecord() -> RewriteRecord? {
         queue.sync {
             loadIfNeeded()
             return cachedRecords.first
         }
     }
 
-    public func allRecords() -> [RewriteRecord] {
+    func allRecords() -> [RewriteRecord] {
         queue.sync {
             loadIfNeeded()
             return cachedRecords
         }
     }
 
-    public func clear() {
+    func clear() {
         queue.sync {
             cachedRecords.removeAll()
             save()
