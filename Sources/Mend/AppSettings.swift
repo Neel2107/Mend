@@ -190,11 +190,10 @@ final class AppSettings: ObservableObject {
         showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
         launchesAtLogin = LoginItem.isEnabled
         draftAPIKeys = savedKeys
-        providerDrafts[savedProvider] = ProviderDraft(endpoint: endpoint, model: model)
-
         customVocabulary = defaults.stringArray(forKey: Key.customVocabulary) ?? []
         enableGhostDiff = defaults.object(forKey: Key.enableGhostDiff) as? Bool ?? false
         enableStreaming = defaults.object(forKey: Key.enableStreaming) as? Bool ?? true
+        providerDrafts[savedProvider] = ProviderDraft(endpoint: endpoint, model: model)
 
         Publishers.MergeMany(
             $provider.dropFirst().map { _ in () }.eraseToAnyPublisher(),

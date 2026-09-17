@@ -34,7 +34,7 @@ enum OverlayState: Equatable {
 
 @MainActor
 final class OverlayModel: ObservableObject {
-    static let initialState = OverlayState.working("Fixing grammar…")
+    nonisolated static let initialState = OverlayState.working("Fixing grammar…")
 
     @Published var state: OverlayState = initialState
 
