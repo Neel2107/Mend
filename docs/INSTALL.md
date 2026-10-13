@@ -28,11 +28,11 @@ Mend is installed first, then Flipside's own installer runs with the same checks
 4. If macOS blocks the first launch, open **System Settings → Privacy & Security**, scroll to **Security**, and choose **Open Anyway** for Mend. Confirm by clicking **Open**.
 5. Use the Mend menu-bar icon to open **Settings**, choose a provider, and add its API key. The endpoint and model presets remain editable.
    When macOS asks whether Mend may use the Keychain item, choose **Always Allow**; plain **Allow** lasts one launch and the question returns after every update. If you choose **Deny**, Mend runs without its saved keys and leaves them untouched; **Try Again** in Settings asks once more.
-6. Choose **Enable Accessibility** from the Mend menu and allow Mend in **System Settings → Privacy & Security → Accessibility**.
+6. Click the Mend menu-bar icon, choose **Allow…** beside the Accessibility notice, and allow Mend in **System Settings → Privacy & Security → Accessibility**.
 
 Because Mend is installed in Applications, macOS indexes it as an application. Launch it from Applications or search for **Mend** in Spotlight or Raycast. Mend then runs in the background without appearing in the Dock or Cmd-Tab.
 
-You can hide Mend's menu-bar icon from its menu or from Settings. The rewrite shortcut remains active. Search for Mend in Spotlight or Raycast to reopen Settings and turn the icon back on.
+You can hide Mend's menu-bar icon from Settings. The rewrite shortcut remains active. Search for Mend in Spotlight or Raycast to reopen Settings and turn the icon back on.
 
 The additional approval in step 4 is required because releases are ad-hoc signed. Developer ID signing and Apple notarization would remove this warning.
 

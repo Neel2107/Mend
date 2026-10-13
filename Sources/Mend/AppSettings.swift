@@ -312,6 +312,15 @@ final class AppSettings: ObservableObject {
         return "Add an API key in Settings"
     }
 
+    /// The first thing in Settings that stops an action from running, or nil
+    /// when every action can run.
+    var firstSetupProblem: String? {
+        for action in actions {
+            if let problem = setupProblem(for: action) { return problem }
+        }
+        return nil
+    }
+
     // MARK: Menu bar and login
 
     func setMenuBarIconVisible(_ isVisible: Bool) {

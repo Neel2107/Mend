@@ -4,7 +4,7 @@ import Carbon
 import SwiftUI
 
 @MainActor
-final class AppCoordinator: NSObject, NSMenuDelegate {
+final class AppCoordinator: NSObject {
     private enum CoordinatorError: LocalizedError {
         case providersFailed([LLMProvider], any Error)
 
@@ -24,10 +24,7 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     private let selectionService = SelectionService()
 
     private var statusItem: NSStatusItem?
-    private var statusMenu: NSMenu?
-    private var localMenuClickMonitor: Any?
-    private var globalMenuClickMonitor: Any?
-    private var isStatusMenuOpen = false
+    private lazy var statusPanel = StatusPanelController { [unowned self] in makeStatusPanelView() }
     private var hotKeys: [HotKeyManager] = []
     private var registeredActions: [RewriteAction] = []
     private var settingsWindow: NSWindow?
@@ -62,34 +59,48 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
     }
 
     private func configureMenuBar() {
-        guard let statusItem else { return }
+        guard let button = statusItem?.button else { return }
 
-        if let button = statusItem.button {
-            button.image = makeMenuBarIcon()
-            button.imageScaling = .scaleProportionallyDown
-            button.toolTip = "Mend"
+        button.image = makeMenuBarIcon()
+        button.imageScaling = .scaleProportionallyDown
+        button.toolTip = "Mend"
+        button.target = self
+        button.action = #selector(statusItemClicked)
+        // On mouse down, like a menu, and for either button.
+        button.sendAction(on: [.leftMouseDown, .rightMouseDown])
+    }
+
+    private func makeStatusPanelView() -> StatusPanelView {
+        // Each command closes the panel first, so it is gone before a window or alert appears.
+        StatusPanelView(
+            settings: settings,
+            isAccessibilityTrusted: AXIsProcessTrusted(),
+            onOpenSettings: { [weak self] in
+                self?.statusPanel.close()
+                self?.openSettings()
+            },
+            onRequestAccessibility: { [weak self] in
+                self?.statusPanel.close()
+                self?.requestAccessibility()
+            },
+            onCheckForUpdates: { [weak self] in
+                self?.statusPanel.close()
+                self?.checkForUpdates()
+            },
+            onQuit: { [weak self] in self?.quit() }
+        )
+    }
+
+    @objc private func statusItemClicked() {
+        // Option-click previews the overlay's states, for working on its design.
+        // Read from the keyboard: the click a status item receives carries no modifiers.
+        if NSEvent.modifierFlags.contains(.option) {
+            statusPanel.close()
+            showTestPill()
+            return
         }
-
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem(title: "Enable Accessibility…", action: #selector(requestAccessibility), keyEquivalent: ""))
-        // Hold Option while the menu is open to reveal the overlay preview.
-        let previewItem = NSMenuItem(title: "Preview Overlay States", action: #selector(showTestPill), keyEquivalent: "")
-        previewItem.keyEquivalentModifierMask = [.option]
-        previewItem.isAlternate = true
-        menu.addItem(previewItem)
-        menu.addItem(NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Hide Menu Bar Icon", action: #selector(hideMenuBarIcon), keyEquivalent: ""))
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Mend", action: #selector(quit), keyEquivalent: "q"))
-
-        for item in menu.items {
-            item.target = self
-        }
-        menu.delegate = self
-        statusMenu = menu
-        statusItem.menu = menu
-        installStatusMenuClickMonitors()
+        guard let button = statusItem?.button else { return }
+        statusPanel.toggle(below: button)
     }
 
     private func makeMenuBarIcon() -> NSImage? {
@@ -114,66 +125,9 @@ final class AppCoordinator: NSObject, NSMenuDelegate {
             statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             configureMenuBar()
         } else if let statusItem {
-            statusMenu?.cancelTracking()
-            statusMenu = nil
-            isStatusMenuOpen = false
-            removeStatusMenuClickMonitors()
+            statusPanel.close()
             NSStatusBar.system.removeStatusItem(statusItem)
             self.statusItem = nil
-        }
-    }
-
-    func menuWillOpen(_ menu: NSMenu) {
-        guard menu === statusMenu else { return }
-        isStatusMenuOpen = true
-    }
-
-    func menuDidClose(_ menu: NSMenu) {
-        guard menu === statusMenu else { return }
-        isStatusMenuOpen = false
-    }
-
-    private func installStatusMenuClickMonitors() {
-        guard localMenuClickMonitor == nil, globalMenuClickMonitor == nil else { return }
-
-        localMenuClickMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak self] event in
-            guard let self, self.isStatusMenuOpen else { return event }
-
-            let clickedStatusIcon = event.windowNumber
-                == self.statusItem?.button?.window?.windowNumber
-            let clickedInsideMenu = event.window?.level == .popUpMenu
-            guard clickedStatusIcon || !clickedInsideMenu else { return event }
-
-            self.statusMenu?.cancelTracking()
-            return clickedStatusIcon ? nil : event
-        }
-
-        globalMenuClickMonitor = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown]
-        ) { [weak menu = statusMenu] _ in
-            // Menu tracking runs its own modal event loop on the main thread.
-            // Cancel synchronously so another menu-bar panel cannot open behind it.
-            menu?.cancelTracking()
-        }
-    }
-
-    private func removeStatusMenuClickMonitors() {
-        if let localMenuClickMonitor {
-            NSEvent.removeMonitor(localMenuClickMonitor)
-            self.localMenuClickMonitor = nil
-        }
-        if let globalMenuClickMonitor {
-            NSEvent.removeMonitor(globalMenuClickMonitor)
-            self.globalMenuClickMonitor = nil
-        }
-    }
-
-    @objc private func hideMenuBarIcon() {
-        settings.setMenuBarIconVisible(false)
-        DispatchQueue.main.async { [weak self] in
-            self?.setMenuBarIconVisible(false)
         }
     }
 

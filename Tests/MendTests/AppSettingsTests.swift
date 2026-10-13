@@ -415,4 +415,30 @@ struct AppSettingsTests {
         _ = AppSettings(readsAPIKeyFromKeychain: true, defaults: defaults, keychain: keychain)
         #expect(keychain.reads.count == readsBefore + 1)
     }
+
+    @Test("The panel reports the first action that cannot run, and nothing once all can")
+    func testFirstSetupProblem() {
+        let settings = makeSettings(makeDefaults())
+        #expect(settings.firstSetupProblem == "Add an API key in Settings")
+
+        settings.apiKey = "test-key"
+        #expect(settings.firstSetupProblem == nil)
+
+        // A later action with nothing to send is found past a working one.
+        settings.actions.append(RewriteAction(name: "Tighten", prompt: "  ", shortcuts: []))
+        #expect(settings.firstSetupProblem == "Add a prompt for “Tighten” in Settings")
+    }
+
+    @Test("A shortcut lists its keys one by one, modifiers first in menu order")
+    func testShortcutKeycaps() {
+        #expect(GlobalShortcut.default.keycaps == ["⌃", "⌥", "G"])
+
+        let everyModifier = GlobalShortcut(
+            keyCode: UInt32(kVK_Space),
+            modifiers: UInt32(cmdKey | shiftKey | optionKey | controlKey),
+            keyLabel: "Space"
+        )
+        #expect(everyModifier.keycaps == ["⌃", "⌥", "⇧", "⌘", "Space"])
+        #expect(everyModifier.displayString == "⌃⌥⇧⌘Space")
+    }
 }

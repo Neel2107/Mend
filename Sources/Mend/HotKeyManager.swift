@@ -21,13 +21,19 @@ struct GlobalShortcut: Codable, Hashable {
             && (keyCode == UInt32(kVK_ANSI_C) || keyCode == UInt32(kVK_ANSI_V))
     }
 
+    /// The keys one by one, modifiers first in the order macOS menus use.
+    var keycaps: [String] {
+        var caps: [String] = []
+        if modifiers & UInt32(controlKey) != 0 { caps.append("⌃") }
+        if modifiers & UInt32(optionKey) != 0 { caps.append("⌥") }
+        if modifiers & UInt32(shiftKey) != 0 { caps.append("⇧") }
+        if modifiers & UInt32(cmdKey) != 0 { caps.append("⌘") }
+        caps.append(keyLabel)
+        return caps
+    }
+
     var displayString: String {
-        var value = ""
-        if modifiers & UInt32(controlKey) != 0 { value += "⌃" }
-        if modifiers & UInt32(optionKey) != 0 { value += "⌥" }
-        if modifiers & UInt32(shiftKey) != 0 { value += "⇧" }
-        if modifiers & UInt32(cmdKey) != 0 { value += "⌘" }
-        return value + keyLabel
+        keycaps.joined()
     }
 
     init(keyCode: UInt32, modifiers: UInt32, keyLabel: String) {
