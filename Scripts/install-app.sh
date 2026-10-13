@@ -11,6 +11,18 @@ fail() {
   exit 1
 }
 
+# --with-flipside also installs Flipside (https://github.com/Neel2107/Flipside), a separate
+# menu bar app for switching display arrangements. Pass it through the pipe with
+# `sh -s -- --with-flipside`.
+WITH_FLIPSIDE="${MEND_WITH_FLIPSIDE:-0}"
+FLIPSIDE_INSTALLER_URL="${MEND_FLIPSIDE_INSTALLER_URL:-https://raw.githubusercontent.com/Neel2107/Flipside/main/scripts/install.sh}"
+for arg in "$@"; do
+  case "$arg" in
+    --with-flipside) WITH_FLIPSIDE=1 ;;
+    *) fail "unknown option: $arg" ;;
+  esac
+done
+
 check_platform() {
   [ "$(uname -s)" = "Darwin" ] || fail "Mend requires macOS"
   [ "$(uname -m)" = "arm64" ] || fail "Mend requires an Apple silicon Mac"
@@ -127,3 +139,12 @@ run_privileged rm -rf "$BACKUP_APP"
 
 echo "Installed Mend at $DESTINATION"
 echo "Launch it with: open \"$DESTINATION\""
+
+if [ "$WITH_FLIPSIDE" = "1" ]; then
+  echo
+  echo "Installing Flipside"
+  flipside_installer="$TEMP_DIR/flipside-install.sh"
+  curl -fsSL --connect-timeout 10 --retry 2 "$FLIPSIDE_INSTALLER_URL" -o "$flipside_installer" \
+    || fail "Mend is installed, but the Flipside installer could not be downloaded"
+  FLIPSIDE_APPS_DIR="$APPS_DIR" sh "$flipside_installer"
+fi

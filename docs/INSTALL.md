@@ -10,6 +10,16 @@ curl -fsSL https://raw.githubusercontent.com/Neel2107/Mend/main/Scripts/install-
 
 The installer downloads the latest release archive, verifies it against the published SHA-256 checksum, and installs Mend into `/Applications`. It can also update an existing installation.
 
+### Install Flipside alongside
+
+[Flipside](https://github.com/Neel2107/Flipside) is a separate menu bar app that switches a Mac between two display arrangements. To install or update both with one command, add `--with-flipside`:
+
+```sh
+curl -fsSL https://mend.itsneel.com/install | sh -s -- --with-flipside
+```
+
+Mend is installed first, then Flipside's own installer runs with the same checks. Without the option, only Mend is installed.
+
 ## Install by hand
 
 1. Download `Mend-app-aarch64-apple-darwin.tar.gz` from the GitHub Releases page.
