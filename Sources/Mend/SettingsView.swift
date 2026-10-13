@@ -32,6 +32,26 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                if settings.savedKeysAreUnread {
+                    // An empty key field here does not mean no key is saved.
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("macOS didn’t let Mend read its saved keys.")
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 12)
+                        Button("Try Again") {
+                            guard settings.retryReadingSavedKeys() else { return }
+                            // Store a key typed in the meantime now, not at the next edit.
+                            do {
+                                try settings.save()
+                            } catch {
+                                onError(error)
+                            }
+                        }
+                    }
+                    .font(.callout)
+                }
             } header: {
                 Text("Provider")
                     .font(.headline)

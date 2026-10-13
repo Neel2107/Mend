@@ -133,6 +133,10 @@ final class AppSettings: ObservableObject {
     @Published var actions: [RewriteAction]
     @Published private(set) var showsMenuBarIcon: Bool
     @Published private(set) var launchesAtLogin: Bool
+    /// True when the Keychain refused the read at launch, for example because
+    /// its prompt was declined. Keys Mend has not seen may be stored, so until
+    /// a read succeeds nothing is written over them.
+    @Published private(set) var savedKeysAreUnread: Bool
 
     /// The endpoint and model last used with one provider, so switching
     /// providers and back does not lose them.
@@ -165,7 +169,8 @@ final class AppSettings: ObservableObject {
         let savedProvider = savedProviderValue
             .flatMap(LLMProvider.init(rawValue:))
             ?? Self.inferProvider(from: savedEndpoint)
-        let savedKeys = readsAPIKeyFromKeychain ? keyStore.load() : [:]
+        let stored = readsAPIKeyFromKeychain ? keyStore.load() : ProviderKeyStore.StoredKeys()
+        let savedKeys = stored.keys
 
         provider = savedProvider
         endpoint = savedEndpoint ?? savedProvider.defaultEndpoint ?? ""
@@ -180,6 +185,7 @@ final class AppSettings: ObservableObject {
         apiKey = savedKeys[savedProvider] ?? ""
         showsMenuBarIcon = defaults.object(forKey: Key.showsMenuBarIcon) as? Bool ?? true
         launchesAtLogin = LoginItem.isEnabled
+        savedKeysAreUnread = !stored.isComplete
         draftAPIKeys = savedKeys
         providerDrafts[savedProvider] = ProviderDraft(endpoint: endpoint, model: model)
 
@@ -300,6 +306,9 @@ final class AppSettings: ObservableObject {
         if model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Add a model in Settings"
         }
+        if savedKeysAreUnread {
+            return "Mend couldn’t read its saved API key. Try again in Settings"
+        }
         return "Add an API key in Settings"
     }
 
@@ -390,8 +399,39 @@ final class AppSettings: ObservableObject {
         defaults.set(try JSONEncoder().encode(draftsByName), forKey: Key.providerDrafts)
         draftAPIKeys[provider] = apiKey
         guard usesKeychain else { return }
+        if savedKeysAreUnread {
+            // With no key entered since the refused read there is nothing to
+            // save, and saving would delete whatever is stored.
+            guard draftAPIKeys.values.contains(where: Self.isEntered) else { return }
+            // A key was entered. Writing it alone would drop the other
+            // providers' keys, so read those first or refuse.
+            guard retryReadingSavedKeys() else { throw KeychainError.savedKeysUnreadable }
+        }
         // One item holds every provider's key, including ones typed before switching back.
         try keyStore.save(draftAPIKeys)
+    }
+
+    /// Asks the Keychain again after a refused read, which shows its prompt
+    /// once more. Keys entered in the meantime win over the stored ones.
+    /// Returns whether the saved keys are now known.
+    @discardableResult
+    func retryReadingSavedKeys() -> Bool {
+        guard savedKeysAreUnread else { return true }
+        let stored = keyStore.load()
+        guard stored.isComplete else { return false }
+
+        draftAPIKeys[provider] = apiKey
+        let entered = draftAPIKeys.filter { Self.isEntered($0.value) }
+        draftAPIKeys = stored.keys.merging(entered) { _, entered in entered }
+        savedKeysAreUnread = false
+        if let key = draftAPIKeys[provider], key != apiKey {
+            apiKey = key
+        }
+        return true
+    }
+
+    private static func isEntered(_ key: String) -> Bool {
+        !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func inferProvider(from endpoint: String?) -> LLMProvider {

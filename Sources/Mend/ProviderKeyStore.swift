@@ -8,11 +8,23 @@ struct ProviderKeyStore {
 
     var keychain: any KeychainAccess = SystemKeychain()
 
-    func load() -> [LLMProvider: String] {
-        if let json = keychain.read(service: Self.service, account: Self.account) {
-            return Self.decode(json)
+    /// The keys a read returned, and whether that is all of them.
+    struct StoredKeys: Equatable {
+        var keys: [LLMProvider: String] = [:]
+        /// False when the Keychain refused a read. More keys may be stored
+        /// than were returned, so nothing may be written over them.
+        var isComplete = true
+    }
+
+    func load() -> StoredKeys {
+        switch keychain.read(service: Self.service, account: Self.account) {
+        case .value(let json):
+            return StoredKeys(keys: Self.decode(json))
+        case .unavailable:
+            return StoredKeys(isComplete: false)
+        case .missing:
+            return migrateLegacyItems()
         }
-        return migrateLegacyItems()
     }
 
     func save(_ keys: [LLMProvider: String]) throws {
@@ -28,31 +40,46 @@ struct ProviderKeyStore {
     /// Builds before 0.4 kept one item per provider, and the very first
     /// builds a single unnamed item. Read them once, write the combined item,
     /// and only then remove them.
-    private func migrateLegacyItems() -> [LLMProvider: String] {
-        var keys: [LLMProvider: String] = [:]
+    private func migrateLegacyItems() -> StoredKeys {
+        var stored = StoredKeys()
         for provider in LLMProvider.allCases {
-            if let key = keychain.read(service: Self.service, account: Self.legacyAccount(for: provider)),
-               !key.isEmpty {
-                keys[provider] = key
+            switch keychain.read(service: Self.service, account: Self.legacyAccount(for: provider)) {
+            case .value(let key):
+                if !key.isEmpty { stored.keys[provider] = key }
+            case .missing:
+                continue
+            case .unavailable:
+                stored.isComplete = false
+            }
+            // One refusal is an answer; do not ask again for each provider.
+            if !stored.isComplete { break }
+        }
+        if stored.isComplete, stored.keys.isEmpty {
+            switch keychain.read(service: Self.service, account: Self.originalAccount) {
+            case .value(let original):
+                if !original.isEmpty { stored.keys[.openAI] = original }
+            case .missing:
+                break
+            case .unavailable:
+                stored.isComplete = false
             }
         }
-        if keys.isEmpty,
-           let original = keychain.read(service: Self.service, account: Self.originalAccount),
-           !original.isEmpty {
-            keys[.openAI] = original
-        }
-        guard !keys.isEmpty else { return [:] }
+        // Combining is only safe when every item was read: one that was
+        // refused would be missing from the new item and then deleted. A
+        // partial answer is treated as none, so callers have one case to handle.
+        guard stored.isComplete else { return StoredKeys(isComplete: false) }
+        guard !stored.keys.isEmpty else { return stored }
 
         do {
-            try save(keys)
+            try save(stored.keys)
         } catch {
-            return keys
+            return stored
         }
         for provider in LLMProvider.allCases {
             try? keychain.save("", service: Self.service, account: Self.legacyAccount(for: provider))
         }
         try? keychain.save("", service: Self.service, account: Self.originalAccount)
-        return keys
+        return stored
     }
 
     static func legacyAccount(for provider: LLMProvider) -> String {

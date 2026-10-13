@@ -7,17 +7,22 @@ import Testing
 private final class FakeKeychain: KeychainAccess {
     var items: [String: String]
     private(set) var reads: [String] = []
+    private(set) var writes = 0
+    /// Makes items that exist unreadable, as when the Keychain prompt is declined.
+    var refusesReads = false
 
     init(items: [String: String] = [:]) {
         self.items = items
     }
 
-    func read(service: String, account: String) -> String? {
+    func read(service: String, account: String) -> KeychainRead {
         reads.append(account)
-        return items[account]
+        guard let value = items[account] else { return .missing }
+        return refusesReads ? .unavailable : .value(value)
     }
 
     func save(_ value: String, service: String, account: String) throws {
+        writes += 1
         if value.isEmpty {
             items.removeValue(forKey: account)
         } else {
@@ -280,6 +285,116 @@ struct AppSettingsTests {
         reloaded.selectProvider(.openAI)
         #expect(reloaded.apiKey == "openai-key")
         #expect(keychain.reads.filter { $0 == "provider-keys" }.count == 2)
+    }
+
+    private static let savedKeys = #"{"openAI":"openai-key","gemini":"gemini-key"}"#
+
+    private func makeRefusingKeychain() -> FakeKeychain {
+        let keychain = FakeKeychain(items: ["provider-keys": Self.savedKeys])
+        keychain.refusesReads = true
+        return keychain
+    }
+
+    @Test("A refused Keychain read never costs the saved keys")
+    func testRefusedReadLeavesSavedKeysAlone() throws {
+        let keychain = makeRefusingKeychain()
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: makeDefaults(), keychain: keychain)
+
+        #expect(settings.savedKeysAreUnread)
+        #expect(settings.apiKey.isEmpty)
+        #expect(settings.setupProblem(for: settings.actions[0]) == "Mend couldn’t read its saved API key. Try again in Settings")
+
+        // Every edit and the quit both save. None of them may touch the item.
+        settings.model = "another-model"
+        settings.selectProvider(.gemini)
+        try settings.save()
+        try settings.save()
+
+        #expect(keychain.writes == 0)
+        #expect(keychain.items == ["provider-keys": Self.savedKeys])
+    }
+
+    @Test("A key entered after a refused read is saved beside the others once the Keychain answers")
+    func testKeyEnteredAfterRefusedReadMergesWithSavedKeys() throws {
+        let keychain = makeRefusingKeychain()
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: makeDefaults(), keychain: keychain)
+
+        settings.apiKey = "new-openai-key"
+        // The user allows the prompt this time.
+        keychain.refusesReads = false
+        try settings.save()
+
+        #expect(!settings.savedKeysAreUnread)
+        #expect(ProviderKeyStore.decode(keychain.items["provider-keys"]!) == [.openAI: "new-openai-key", .gemini: "gemini-key"])
+        settings.selectProvider(.gemini)
+        #expect(settings.apiKey == "gemini-key")
+    }
+
+    @Test("A key entered while the Keychain still refuses is reported, not written over the others")
+    func testKeyEnteredWhileStillRefusedIsNotSaved() {
+        let keychain = makeRefusingKeychain()
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: makeDefaults(), keychain: keychain)
+
+        settings.apiKey = "new-openai-key"
+        #expect(throws: KeychainError.savedKeysUnreadable) {
+            try settings.save()
+        }
+
+        #expect(settings.savedKeysAreUnread)
+        #expect(keychain.writes == 0)
+        #expect(keychain.items == ["provider-keys": Self.savedKeys])
+        // The key still works for this session.
+        #expect(settings.hasUsableProvider)
+    }
+
+    @Test("Trying again after a refusal loads the saved key")
+    func testRetryLoadsSavedKeys() throws {
+        let keychain = makeRefusingKeychain()
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: makeDefaults(), keychain: keychain)
+
+        #expect(!settings.retryReadingSavedKeys())
+        #expect(settings.savedKeysAreUnread)
+
+        keychain.refusesReads = false
+        #expect(settings.retryReadingSavedKeys())
+        #expect(!settings.savedKeysAreUnread)
+        #expect(settings.apiKey == "openai-key")
+        #expect(settings.setupProblem(for: settings.actions[0]) == nil)
+
+        // From here on saving behaves as usual, including clearing a key.
+        settings.apiKey = ""
+        try settings.save()
+        #expect(ProviderKeyStore.decode(keychain.items["provider-keys"]!) == [.gemini: "gemini-key"])
+    }
+
+    @Test("Refused items from older builds are neither merged nor deleted")
+    func testRefusedLegacyItemsAreLeftAlone() throws {
+        let legacy = ["provider-key-openAI": "openai-key", "provider-key-gemini": "gemini-key"]
+        let keychain = FakeKeychain(items: legacy)
+        keychain.refusesReads = true
+
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: makeDefaults(), keychain: keychain)
+        try settings.save()
+
+        #expect(settings.savedKeysAreUnread)
+        #expect(keychain.writes == 0)
+        #expect(keychain.items == legacy)
+        // One refusal is taken as the answer for the rest.
+        #expect(keychain.reads == ["provider-keys", "provider-key-openAI"])
+    }
+
+    @Test("With nothing saved, an empty key is simply a missing key")
+    func testNothingSavedIsNotARefusal() throws {
+        let keychain = FakeKeychain()
+        keychain.refusesReads = true
+        let settings = AppSettings(readsAPIKeyFromKeychain: true, defaults: makeDefaults(), keychain: keychain)
+
+        #expect(!settings.savedKeysAreUnread)
+        #expect(settings.setupProblem(for: settings.actions[0]) == "Add an API key in Settings")
+
+        settings.apiKey = "first-key"
+        try settings.save()
+        #expect(ProviderKeyStore.decode(keychain.items["provider-keys"]!) == [.openAI: "first-key"])
     }
 
     @Test("Per-provider items from older builds merge into the single item once")
