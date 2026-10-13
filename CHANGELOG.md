@@ -2,6 +2,14 @@
 
 Each release publishes its section here as the GitHub release notes.
 
+## 0.4.0 — 2026-10-14
+
+- The menu bar icon opens a panel instead of a menu. It shows your provider and model, every action with its shortcut, and anything that needs fixing before Mend can run.
+- Declining the Keychain prompt no longer costs you your API keys. Before, Mend started without them and the next settings change, or quitting, deleted every saved key. Now they are left alone, and Settings says what happened and offers Try Again.
+- A key entered after declining is saved beside the others once macOS lets Mend read them, instead of replacing them.
+- Hide Menu Bar Icon is in Settings only. The panel offers Accessibility access whenever it is missing.
+- The terminal installer can also install [Flipside](https://github.com/Neel2107/Flipside): add `--with-flipside`.
+
 ## 0.3.5 — 2026-09-10
 
 - The status capsule is Liquid Glass on macOS 26, so it no longer sits as a flat grey slab over light windows. Earlier systems keep the previous material.
